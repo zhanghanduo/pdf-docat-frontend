@@ -69,6 +69,82 @@ export interface LanguagesResponse {
   languages: Record<string, string>;
 }
 
+// Client API Keys types
+export interface SupportedService {
+  service_name: string;
+  supported_models: string[];
+  default_model: string;
+  rate_limit_per_minute: number;
+  requires_model: boolean;
+}
+
+export interface SupportedServicesResponse {
+  [serviceName: string]: SupportedService;
+}
+
+export interface ClientApiKeyCreate {
+  service_name: string;
+  api_key: string;
+  name?: string;
+  description?: string;
+  model_name?: string;
+  is_default?: boolean;
+  config?: Record<string, any>;
+}
+
+export interface ClientApiKeyUpdate {
+  name?: string;
+  description?: string;
+  model_name?: string;
+  is_default?: boolean;
+  is_active?: boolean;
+  config?: Record<string, any>;
+}
+
+export interface ClientApiKeyResponse {
+  id: number;
+  user_id: number;
+  service_name: string;
+  name?: string;
+  description?: string;
+  model_name?: string;
+  api_key_masked: string;
+  is_active: boolean;
+  is_default: boolean;
+  usage_count: number;
+  last_used?: string;
+  created_at: string;
+  updated_at: string;
+  config?: Record<string, any>;
+}
+
+export interface ClientApiKeyListResponse {
+  id: number;
+  service_name: string;
+  name?: string;
+  model_name?: string;
+  api_key_masked: string;
+  is_active: boolean;
+  is_default: boolean;
+  usage_count: number;
+  last_used?: string;
+  created_at: string;
+}
+
+export interface ApiKeyTestRequest {
+  service_name: string;
+  api_key: string;
+  model_name?: string;
+}
+
+export interface ApiKeyTestResponse {
+  valid: boolean;
+  service?: string;
+  model?: string;
+  rate_limit?: number;
+  error?: string;
+}
+
 // API functions
 export const pdfApi = {
   // Health check
@@ -153,6 +229,55 @@ export const pdfApi = {
   async cleanupFiles(taskId: string): Promise<void> {
     await apiClient.delete(`/api/v1/cleanup/${taskId}`);
   },
+};
+
+// Client API Keys API
+export const clientApiKeysApi = {
+  // Get supported services
+  async getSupportedServices(): Promise<SupportedServicesResponse> {
+    const response = await apiClient.get('/api/v1/client-api-keys/services');
+    return response.data;
+  },
+
+  // Create API key
+  async createApiKey(data: ClientApiKeyCreate): Promise<ClientApiKeyResponse> {
+    const response = await apiClient.post('/api/v1/client-api-keys/', data);
+    return response.data;
+  },
+
+  // List API keys
+  async getApiKeys(serviceFilter?: string, activeOnly: boolean = true): Promise<ClientApiKeyListResponse[]> {
+    const params: any = { active_only: activeOnly };
+    if (serviceFilter) {
+      params.service_name = serviceFilter;
+    }
+    const response = await apiClient.get('/api/v1/client-api-keys/', { params });
+    return response.data;
+  },
+
+  // Get specific API key
+  async getApiKey(keyId: number): Promise<ClientApiKeyResponse> {
+    const response = await apiClient.get(`/api/v1/client-api-keys/${keyId}`);
+    return response.data;
+  },
+
+  // Update API key
+  async updateApiKey(keyId: number, data: ClientApiKeyUpdate): Promise<ClientApiKeyResponse> {
+    const response = await apiClient.put(`/api/v1/client-api-keys/${keyId}`, data);
+    return response.data;
+  },
+
+  // Delete API key
+  async deleteApiKey(keyId: number): Promise<{ message: string }> {
+    const response = await apiClient.delete(`/api/v1/client-api-keys/${keyId}`);
+    return response.data;
+  },
+
+  // Test API key
+  async testApiKey(data: ApiKeyTestRequest): Promise<ApiKeyTestResponse> {
+    const response = await apiClient.post('/api/v1/client-api-keys/test', data);
+    return response.data;
+  }
 };
 
 export default apiClient; 

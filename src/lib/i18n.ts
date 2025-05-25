@@ -35,6 +35,14 @@ export interface Translations {
   geminiApiKeyPlaceholder: string;
   useCustomGemini: string;
   
+  // API Keys Management
+  apiKeysManagement: string;
+  manageApiKeys: string;
+  addApiKeys: string;
+  manageKeysDescription: string;
+  usingCustomKeysDescription: string;
+  keysConfigured: string;
+  
   // Actions
   translatePdf: string;
   translating: string;
@@ -88,6 +96,14 @@ const translations: Record<Language, Translations> = {
     geminiApiKeyPlaceholder: '输入您的 Gemini API 密钥',
     useCustomGemini: '使用自定义 Gemini 设置',
     
+    // API Keys Management
+    apiKeysManagement: 'API 密钥管理',
+    manageApiKeys: '管理密钥',
+    addApiKeys: '添加密钥',
+    manageKeysDescription: '管理您的自定义 API 密钥（支持 Gemini 和 OpenRouter）',
+    usingCustomKeysDescription: '正在使用您的自定义 API 密钥',
+    keysConfigured: '个密钥已配置',
+    
     // Actions
     translatePdf: '翻译 PDF',
     translating: '翻译中...',
@@ -138,6 +154,14 @@ const translations: Record<Language, Translations> = {
     geminiModel: 'Gemini Model',
     geminiApiKeyPlaceholder: 'Enter your Gemini API key',
     useCustomGemini: 'Use custom Gemini settings',
+    
+    // API Keys Management
+    apiKeysManagement: 'API Keys Management',
+    manageApiKeys: 'Manage Keys',
+    addApiKeys: 'Add Keys',
+    manageKeysDescription: 'Manage your custom API keys for AI services like Gemini and OpenRouter',
+    usingCustomKeysDescription: 'Using your custom API keys',
+    keysConfigured: 'keys configured',
     
     // Actions
     translatePdf: 'Translate PDF',

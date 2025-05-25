@@ -13,14 +13,18 @@ import {
   CheckCircle,
   XCircle,
   Languages,
-  Trash2
+  Trash2,
+  Key
 } from 'lucide-react';
 
 import { pdfApi, TranslateRequest, GeminiSettings } from './lib/api';
 import { useTranslation, Language, getAvailableLanguages } from './lib/i18n';
+import ApiKeysManager from './components/ApiKeysManager';
+import AuthCheck from './components/AuthCheck';
+import { useClientApiKeys } from './hooks/useClientApiKeys';
 
 import { Button } from './components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
@@ -39,6 +43,7 @@ const PDFTranslator: React.FC = () => {
   const [dualMode, setDualMode] = useState<boolean>(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
+  const [showApiKeysManager, setShowApiKeysManager] = useState<boolean>(false);
   const [useCustomGemini, setUseCustomGemini] = useState<boolean>(false);
   const [geminiSettings, setGeminiSettings] = useState<GeminiSettings>({
     apiKey: '',
@@ -54,11 +59,14 @@ const PDFTranslator: React.FC = () => {
     queryFn: pdfApi.getSupportedLanguages,
   });
 
-  const { data: healthData, isLoading: healthLoading } = useQuery({
+  const { isLoading: healthLoading } = useQuery({
     queryKey: ['health'],
     queryFn: pdfApi.healthCheck,
     refetchInterval: 30000,
   });
+
+  // Client API Keys
+  const { apiKeys: clientApiKeys } = useClientApiKeys();
 
   // Mutations
   const translateMutation = useMutation({
@@ -113,7 +121,11 @@ const PDFTranslator: React.FC = () => {
       dual: dualMode,
     };
 
-    if (useCustomGemini && (geminiSettings.apiKey || geminiSettings.model)) {
+    // Use client API keys if available, otherwise fall back to legacy custom Gemini settings
+    if (clientApiKeys.hasCustomKeys && clientApiKeys.defaultGeminiKey) {
+      // Backend will automatically use the user's configured API keys
+      // No need to pass them explicitly in the request
+    } else if (useCustomGemini && (geminiSettings.apiKey || geminiSettings.model)) {
       request.gemini_settings = geminiSettings;
     }
 
@@ -129,6 +141,17 @@ const PDFTranslator: React.FC = () => {
   //const isServiceAvailable = healthData?.pdftranslate_available ?? false;
   const isServiceAvailable = true; // 强制服务为可用
   const languages = languagesData?.languages ?? {};
+
+  // If API Keys Manager is open, show it instead of the main interface
+  if (showApiKeysManager) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
+          <ApiKeysManager onClose={() => setShowApiKeysManager(false)} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -183,6 +206,13 @@ const PDFTranslator: React.FC = () => {
                     <span className="text-sm font-medium">
                       {t.serviceStatus}: {isServiceAvailable ? t.serviceAvailable : t.serviceUnavailable}
                     </span>
+                    {clientApiKeys.hasCustomKeys && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <Key className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm text-blue-600">Custom API Keys Active</span>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -328,11 +358,42 @@ const PDFTranslator: React.FC = () => {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-4">
+                  {/* API Keys Management */}
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <Label className="text-base font-medium flex items-center space-x-2">
+                          <Key className="h-4 w-4" />
+                          <span>{t.apiKeysManagement}</span>
+                          {clientApiKeys.hasCustomKeys && (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                              {clientApiKeys.geminiKeys.length + clientApiKeys.openrouterKeys.length} {t.keysConfigured}
+                            </span>
+                          )}
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          {clientApiKeys.hasCustomKeys 
+                            ? `${t.usingCustomKeysDescription}. ${clientApiKeys.defaultGeminiKey ? 'Gemini' : 'No Gemini'} ${clientApiKeys.defaultOpenrouterKey ? '+ OpenRouter' : ''} configured.`
+                            : t.manageKeysDescription
+                          }
+                        </p>
+                      </div>
+                      <Button
+                        variant={clientApiKeys.hasCustomKeys ? "default" : "outline"}
+                        onClick={() => setShowApiKeysManager(true)}
+                        className="flex items-center space-x-2"
+                      >
+                        <Settings className="h-4 w-4" />
+                        <span>{clientApiKeys.hasCustomKeys ? t.manageApiKeys : t.addApiKeys}</span>
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="space-y-1">
                       <Label className="text-base font-medium">{t.useCustomGemini}</Label>
                       <p className="text-sm text-muted-foreground">
-                        Use your own Gemini API key and model settings
+                        Use your own Gemini API key and model settings (Legacy)
                       </p>
                     </div>
                     <Switch checked={useCustomGemini} onCheckedChange={setUseCustomGemini} />
@@ -468,7 +529,9 @@ const PDFTranslator: React.FC = () => {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <PDFTranslator />
+      <AuthCheck>
+        <PDFTranslator />
+      </AuthCheck>
     </QueryClientProvider>
   );
 }
