@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF-Docat API Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .warning { color: orange; }
+        #results { margin-top: 20px; }
+        p { margin: 5px 0; }
+        .input-group { margin: 20px 0; }
+        input[type="url"] { width: 400px; padding: 8px; margin: 0 10px; }
+        button { padding: 8px 16px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        .example { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>PDF-Docat API Connection Test</h1>
+    
+    <div class="input-group">
+        <label for="apiUrl">Backend API URL:</label>
+        <input type="url" id="apiUrl" placeholder="https://your-backend-api.example.com" value="https://your-backend-api.example.com">
+        <button onclick="testConnection()">Test Connection</button>
+    </div>
+    
+    <div class="example">
+        <strong>Examples:</strong><br>
+        • Local development: <code>http://localhost:8000</code><br>
+        • Replit deployment: <code>https://your-project.username.replit.app</code><br>
+        • Custom domain: <code>https://api.yourdomain.com</code>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function log(message, type = 'info') {
+            const className = type === 'success' ? 'success' : 
+                            type === 'error' ? 'error' : 
+                            type === 'warning' ? 'warning' : 'info';
+            resultsDiv.innerHTML += `<p class="${className}">${message}</p>`;
+            console.log(message);
+        }
+        
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+        }
+        
+        async function testConnection() {
+            clearResults();
+            const API_BASE_URL = document.getElementById('apiUrl').value.trim();
+            
+            if (!API_BASE_URL) {
+                log('❌ Please enter a valid API URL', 'error');
+                return;
+            }
+            
+            if (API_BASE_URL === 'https://your-backend-api.example.com') {
+                log('⚠️ Please replace the example URL with your actual backend API URL', 'warning');
+                return;
+            }
+            
+            try {
+                log('🔍 Testing PDF-Docat API connection...', 'info');
+                log(`📡 API Base URL: ${API_BASE_URL}`, 'info');
+                
+                // Test 1: Health endpoint
+                log('\n1. Testing health endpoint...', 'info');
+                const healthResponse = await fetch(`${API_BASE_URL}/health`);
+                
+                if (!healthResponse.ok) {
+                    throw new Error(`Health check failed: ${healthResponse.status}`);
+                }
+                
+                const healthData = await healthResponse.json();
+                log('✅ Health check passed: ' + JSON.stringify(healthData), 'success');
+                
+                // Test 2: Supported languages endpoint
+                log('\n2. Testing supported languages endpoint...', 'info');
+                const languagesResponse = await fetch(`${API_BASE_URL}/api/v1/supported-languages`);
+                
+                if (!languagesResponse.ok) {
+                    throw new Error(`Languages check failed: ${languagesResponse.status}`);
+                }
+                
+                const languagesData = await languagesResponse.json();
+                log('✅ Languages endpoint passed', 'success');
+                log('📋 Available languages: ' + Object.keys(languagesData.languages).length, 'success');
+                
+                // Test 3: CORS headers
+                log('\n3. Testing CORS configuration...', 'info');
+                const corsHeaders = languagesResponse.headers.get('access-control-allow-origin');
+                log('🌐 CORS headers: ' + (corsHeaders || 'Not set'), 'info');
+                
+                log('\n🎉 All tests passed! Frontend can connect to backend.', 'success');
+                log('\n📝 Next steps:', 'info');
+                log('1. Deploy your frontend to Vercel/Netlify/Replit', 'info');
+                log('2. Set VITE_API_BASE_URL=' + API_BASE_URL, 'info');
+                log('3. Test the full application workflow', 'info');
+                
+            } catch (error) {
+                log('\n❌ Connection test failed: ' + error.message, 'error');
+                log('\n🔧 Troubleshooting tips:', 'info');
+                log('1. Make sure the backend API is running', 'info');
+                log('2. Check if the API URL is correct', 'info');
+                log('3. Verify CORS configuration in the backend', 'info');
+                log('4. Check firewall and network settings', 'info');
+                log('5. Try with a different URL or check browser console for details', 'info');
+            }
+        }
+        
+        // Allow Enter key to trigger test
+        document.getElementById('apiUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testConnection();
+            }
+        });
+    </script>
+</body>
+</html> 
