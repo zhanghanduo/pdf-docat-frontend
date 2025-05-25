@@ -14,14 +14,18 @@ import {
   XCircle,
   Languages,
   Trash2,
-  Key
+  Key,
+  Shield,
+  LogOut
 } from 'lucide-react';
 
 import { pdfApi, TranslateRequest, GeminiSettings } from './lib/api';
 import { useTranslation, Language, getAvailableLanguages } from './lib/i18n';
 import ApiKeysManager from './components/ApiKeysManager';
 import AuthCheck from './components/AuthCheck';
+import AdminDashboard from './components/AdminDashboard';
 import { useClientApiKeys } from './hooks/useClientApiKeys';
+import { getCurrentUser, isAdmin, mockLogout } from './lib/crypto';
 
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
@@ -44,11 +48,15 @@ const PDFTranslator: React.FC = () => {
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   const [showApiKeysManager, setShowApiKeysManager] = useState<boolean>(false);
+  const [showAdminDashboard, setShowAdminDashboard] = useState<boolean>(false);
   const [useCustomGemini, setUseCustomGemini] = useState<boolean>(false);
   const [geminiSettings, setGeminiSettings] = useState<GeminiSettings>({
     apiKey: '',
     model: 'gemini-2.5-flash-preview-05-20',
   });
+
+  const currentUser = getCurrentUser();
+  const userIsAdmin = isAdmin();
 
   const t = useTranslation(currentLanguage);
   const availableLanguages = getAvailableLanguages();
@@ -142,6 +150,23 @@ const PDFTranslator: React.FC = () => {
   const isServiceAvailable = true; // 强制服务为可用
   const languages = languagesData?.languages ?? {};
 
+  // Handle logout
+  const handleLogout = () => {
+    mockLogout();
+    window.location.reload();
+  };
+
+  // If Admin Dashboard is open, show it instead of the main interface
+  if (showAdminDashboard && userIsAdmin) {
+    return (
+      <AdminDashboard 
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onBackToApp={() => setShowAdminDashboard(false)}
+      />
+    );
+  }
+
   // If API Keys Manager is open, show it instead of the main interface
   if (showApiKeysManager) {
     return (
@@ -166,25 +191,56 @@ const PDFTranslator: React.FC = () => {
               <div>
                 <h1 className="text-3xl font-bold text-foreground">{t.title}</h1>
                 <p className="text-muted-foreground">{t.subtitle}</p>
+                {currentUser && (
+                  <p className="text-sm text-muted-foreground">
+                    Welcome, {currentUser.name || currentUser.email}
+                    {userIsAdmin && <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-xs rounded">Admin</span>}
+                  </p>
+                )}
               </div>
             </div>
             
-            {/* Language Toggle */}
-            <Select value={currentLanguage} onValueChange={(value: Language) => setCurrentLanguage(value)}>
-              <SelectTrigger className="w-32">
-                <div className="flex items-center space-x-2">
-                  <Languages className="h-4 w-4" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {availableLanguages.map((lang) => (
-                  <SelectItem key={lang.code} value={lang.code}>
-                    {lang.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Header Actions */}
+            <div className="flex items-center space-x-2">
+              {/* Admin Dashboard Button */}
+              {userIsAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAdminDashboard(true)}
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Admin
+                </Button>
+              )}
+              
+              {/* Language Toggle */}
+              <Select value={currentLanguage} onValueChange={(value: Language) => setCurrentLanguage(value)}>
+                <SelectTrigger className="w-32">
+                  <div className="flex items-center space-x-2">
+                    <Languages className="h-4 w-4" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLanguages.map((lang) => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Logout Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
           </div>
 
           {/* Service Status */}

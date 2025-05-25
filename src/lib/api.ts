@@ -145,6 +145,66 @@ export interface ApiKeyTestResponse {
   error?: string;
 }
 
+// Authentication types
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: User;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  name?: string;
+  role: 'admin' | 'user';
+  tier: string;
+  is_active: boolean;
+  last_active?: string;
+  created_at: string;
+}
+
+export interface UserCreate {
+  email: string;
+  password: string;
+  name?: string;
+  role?: 'admin' | 'user';
+  tier?: string;
+}
+
+export interface UserUpdate {
+  email?: string;
+  name?: string;
+  role?: 'admin' | 'user';
+  tier?: string;
+  is_active?: boolean;
+}
+
+// Credit types
+export interface UserCredits {
+  used: number;
+  limit: number;
+  available: number;
+}
+
+export interface CreditLog {
+  id: number;
+  user_id: number;
+  credits: number;
+  operation: 'add' | 'subtract' | 'set';
+  description: string;
+  created_at: string;
+}
+
+export interface CreditUpdate {
+  credits: number;
+  operation: 'add' | 'subtract' | 'set';
+  description?: string;
+}
+
 // API functions
 export const pdfApi = {
   // Health check
@@ -278,6 +338,102 @@ export const clientApiKeysApi = {
     const response = await apiClient.post('/api/v1/client-api-keys/test', data);
     return response.data;
   }
+};
+
+// Authentication API
+export const authApi = {
+  // Login
+  async login(credentials: LoginRequest): Promise<LoginResponse> {
+    const formData = new FormData();
+    formData.append('username', credentials.username);
+    formData.append('password', credentials.password);
+
+    const response = await apiClient.post('/api/v1/auth/login', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Register
+  async register(userData: UserCreate): Promise<LoginResponse> {
+    const response = await apiClient.post('/api/v1/auth/register', userData);
+    return response.data;
+  },
+
+  // Get current user
+  async getCurrentUser(): Promise<User> {
+    const response = await apiClient.get('/api/v1/users/me');
+    return response.data;
+  },
+};
+
+// User Management API
+export const userApi = {
+  // List all users (admin only)
+  async getUsers(skip: number = 0, limit: number = 100): Promise<User[]> {
+    const response = await apiClient.get('/api/v1/users/', {
+      params: { skip, limit }
+    });
+    return response.data;
+  },
+
+  // Create user (admin only)
+  async createUser(userData: UserCreate): Promise<User> {
+    const response = await apiClient.post('/api/v1/users/', userData);
+    return response.data;
+  },
+
+  // Get specific user
+  async getUser(userId: number): Promise<User> {
+    const response = await apiClient.get(`/api/v1/users/${userId}`);
+    return response.data;
+  },
+
+  // Update user (admin only)
+  async updateUser(userId: number, userData: UserUpdate): Promise<User> {
+    const response = await apiClient.put(`/api/v1/users/${userId}`, userData);
+    return response.data;
+  },
+
+  // Delete user (admin only)
+  async deleteUser(userId: number): Promise<{ message: string }> {
+    const response = await apiClient.delete(`/api/v1/users/${userId}`);
+    return response.data;
+  },
+
+  // Update current user
+  async updateMe(userData: UserUpdate): Promise<User> {
+    const response = await apiClient.put('/api/v1/users/me', userData);
+    return response.data;
+  },
+};
+
+// Credit Management API
+export const creditApi = {
+  // Get user credits
+  async getUserCredits(userId?: number): Promise<UserCredits> {
+    const url = userId ? `/api/v1/credits/user/${userId}` : '/api/v1/credits/';
+    const response = await apiClient.get(url);
+    return response.data;
+  },
+
+  // Get credit logs
+  async getCreditLogs(userId?: number, limit: number = 10, offset: number = 0): Promise<CreditLog[]> {
+    const url = userId ? `/api/v1/credits/user/${userId}/logs` : '/api/v1/credits/logs';
+    const response = await apiClient.get(url, {
+      params: { limit, offset }
+    });
+    return response.data;
+  },
+
+  // Update user credits (admin only)
+  async updateUserCredits(userId: number, creditData: CreditUpdate): Promise<UserCredits> {
+    // Note: This endpoint might need to be implemented in the backend
+    const response = await apiClient.post(`/api/v1/credits/user/${userId}/update`, creditData);
+    return response.data;
+  },
 };
 
 export default apiClient; 
