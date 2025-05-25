@@ -21,8 +21,8 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
-import { mockUsers, mockLogout } from '../lib/crypto';
-import { UserCreate, UserUpdate } from '../lib/api';
+import { logout } from '../lib/auth';
+import { UserCreate, UserUpdate, UserWithCredits, userApi, creditApi } from '../lib/api';
 
 interface AdminDashboardProps {
   currentUser: any;
@@ -42,7 +42,7 @@ interface UserFormData {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout, onBackToApp }) => {
   const [showUserForm, setShowUserForm] = useState(false);
-  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editingUser, setEditingUser] = useState<UserWithCredits | null>(null);
   const [showCreditForm, setShowCreditForm] = useState<number | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
     email: '',
@@ -61,30 +61,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout, 
 
   const queryClient = useQueryClient();
 
-  // Mock queries (in production, these would be real API calls)
-  const { data: users, isLoading: usersLoading } = useQuery({
+  // Real API queries - fetch users and their credits
+  const { data: users, isLoading: usersLoading } = useQuery<UserWithCredits[]>({
     queryKey: ['users'],
-    queryFn: () => Promise.resolve(mockUsers),
+    queryFn: async () => {
+      const usersData = await userApi.getUsers();
+      // Fetch credits for each user
+      const usersWithCredits = await Promise.all(
+        usersData.map(async (user) => {
+          try {
+            const credits = await creditApi.getUserCredits(user.id);
+            return { ...user, credits };
+          } catch (error) {
+            console.error(`Failed to fetch credits for user ${user.id}:`, error);
+            return { ...user, credits: { used: 0, limit: 0, available: 0 } };
+          }
+        })
+      );
+      return usersWithCredits;
+    },
   });
 
-  // Mock mutations
+  // Real API mutations
   const createUserMutation = useMutation({
-    mutationFn: async (userData: UserCreate) => {
-      // Mock user creation
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const newUser = {
-        id: Date.now(),
-        email: userData.email,
-        name: userData.name || '',
-        role: userData.role || 'user',
-        tier: userData.tier || 'basic',
-        is_active: formData.is_active,
-        created_at: new Date().toISOString(),
-        credits: { used: 0, limit: formData.credits, available: formData.credits }
-      };
-      mockUsers.push(newUser);
-      return newUser;
-    },
+    mutationFn: userApi.createUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setShowUserForm(false);
@@ -93,14 +93,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout, 
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, userData }: { userId: number; userData: UserUpdate }) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const userIndex = mockUsers.findIndex(u => u.id === userId);
-      if (userIndex !== -1) {
-        mockUsers[userIndex] = { ...mockUsers[userIndex], ...userData };
-      }
-      return mockUsers[userIndex];
-    },
+    mutationFn: ({ userId, userData }: { userId: number; userData: UserUpdate }) =>
+      userApi.updateUser(userId, userData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setEditingUser(null);
@@ -110,47 +104,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout, 
   });
 
   const deleteUserMutation = useMutation({
-    mutationFn: async (userId: number) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const userIndex = mockUsers.findIndex(u => u.id === userId);
-      if (userIndex !== -1) {
-        mockUsers.splice(userIndex, 1);
-      }
-      return { message: 'User deleted successfully' };
-    },
+    mutationFn: userApi.deleteUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 
   const updateCreditsMutation = useMutation({
-    mutationFn: async ({ userId, creditData }: { userId: number; creditData: any }) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const userIndex = mockUsers.findIndex(u => u.id === userId);
-      if (userIndex !== -1) {
-        const user = mockUsers[userIndex];
-        const currentCredits = user.credits;
-        
-        let newLimit = currentCredits.limit;
-        switch (creditData.operation) {
-          case 'add':
-            newLimit = currentCredits.limit + creditData.credits;
-            break;
-          case 'subtract':
-            newLimit = Math.max(0, currentCredits.limit - creditData.credits);
-            break;
-          case 'set':
-            newLimit = creditData.credits;
-            break;
-        }
-        
-        user.credits = {
-          ...currentCredits,
-          limit: newLimit,
-          available: newLimit - currentCredits.used
-        };
-      }
-      return mockUsers[userIndex];
+    mutationFn: async (_: { userId: number; creditData: any }) => {
+      // TODO: Backend endpoint for credit updates needs to be implemented
+      // For now, show a message that this feature is not yet available
+      throw new Error('Credit update functionality is not yet implemented in the backend. Please contact the developer to implement the POST /api/v1/credits/user/{userId}/update endpoint.');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -195,7 +159,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout, 
     }
   };
 
-  const handleEdit = (user: any) => {
+  const handleEdit = (user: UserWithCredits) => {
     setEditingUser(user);
     setFormData({
       email: user.email,
@@ -220,7 +184,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout, 
   };
 
   const handleLogout = () => {
-    mockLogout();
+    logout();
     onLogout();
   };
 

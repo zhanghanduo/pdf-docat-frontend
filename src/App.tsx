@@ -25,7 +25,7 @@ import ApiKeysManager from './components/ApiKeysManager';
 import AuthCheck from './components/AuthCheck';
 import AdminDashboard from './components/AdminDashboard';
 import { useClientApiKeys } from './hooks/useClientApiKeys';
-import { getCurrentUser, isAdmin, mockLogout } from './lib/crypto';
+import { getCurrentUser, isAdmin, logout } from './lib/auth';
 
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
@@ -152,7 +152,7 @@ const PDFTranslator: React.FC = () => {
 
   // Handle logout
   const handleLogout = () => {
-    mockLogout();
+                    logout();
     window.location.reload();
   };
 

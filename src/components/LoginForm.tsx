@@ -15,7 +15,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { mockLogin, getAdminCredentials } from '../lib/crypto';
+import { authApi } from '../lib/api';
 
 interface LoginFormProps {
   onLoginSuccess: (user: any) => void;
@@ -30,8 +30,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
 
   const loginMutation = useMutation({
     mutationFn: ({ username, password }: { username: string; password: string }) =>
-      mockLogin(username, password),
+      authApi.login({ username, password }),
     onSuccess: (data) => {
+      // Store the token in localStorage
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
       onLoginSuccess(data.user);
     },
   });
@@ -47,17 +50,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   };
 
   const handleAdminQuickLogin = () => {
-    const adminCreds = getAdminCredentials();
     setFormData({
-      username: adminCreds.username,
-      password: adminCreds.password,
+      username: 'admin@so-cat.top',
+      password: 'Christlurker@2',
     });
   };
 
   const handleDemoUserLogin = () => {
     setFormData({
-      username: 'user1@example.com',
-      password: 'user123',
+      username: 'handuo@so-cat.top',
+      password: 'christtc1',
     });
   };
 

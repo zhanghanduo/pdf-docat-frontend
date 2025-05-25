@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { isAuthenticated, getCurrentUser } from '../lib/crypto';
+import { isAuthenticated, getCurrentUser } from '../lib/auth';
 import LoginForm from './LoginForm';
 
 interface AuthCheckProps {

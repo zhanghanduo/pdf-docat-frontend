@@ -167,6 +167,11 @@ export interface User {
   created_at: string;
 }
 
+// Extended user interface for admin dashboard that includes credits
+export interface UserWithCredits extends User {
+  credits?: UserCredits;
+}
+
 export interface UserCreate {
   email: string;
   password: string;
