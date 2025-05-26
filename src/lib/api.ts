@@ -54,9 +54,11 @@ export interface TranslateRequest {
 }
 
 export interface TranslateResponse {
-  task_id: string;
+  task_id?: string;
+  logId?: number;
   message: string;
   status: string;
+  extractedContent?: any;
 }
 
 export interface HealthResponse {
@@ -210,6 +212,22 @@ export interface CreditUpdate {
   description?: string;
 }
 
+// Processing Log types
+export interface ProcessingLog {
+  id: number;
+  user_id: number;
+  file_name: string;
+  file_size: number;
+  file_hash?: string;
+  engine: string;
+  status: string;
+  processing_time?: number;
+  extracted_content?: any;
+  file_annotations?: any;
+  credits_used?: number;
+  timestamp: string;
+}
+
 // API functions
 export const pdfApi = {
   // Health check
@@ -293,6 +311,47 @@ export const pdfApi = {
   // Cleanup files
   async cleanupFiles(taskId: string): Promise<void> {
     await apiClient.delete(`/api/v1/cleanup/${taskId}`);
+  },
+
+  // Processing logs
+  async getProcessingLogs(limit: number = 10, offset: number = 0): Promise<ProcessingLog[]> {
+    const response = await apiClient.get('/api/v1/pdf/logs', {
+      params: { limit, offset }
+    });
+    return response.data;
+  },
+
+  async getProcessingLog(logId: number): Promise<ProcessingLog> {
+    const response = await apiClient.get(`/api/v1/pdf/logs/${logId}`);
+    return response.data;
+  },
+
+  // Download from processing log
+  async downloadFromLog(logId: number): Promise<Blob> {
+    const response = await apiClient.get(`/api/v1/pdf/logs/${logId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Download translated PDF by log ID
+  async downloadTranslatedPdf(logId: number): Promise<Blob> {
+    const response = await apiClient.get(`/api/v1/pdf/download/${logId}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Delete processing log
+  async deleteProcessingLog(logId: number): Promise<{ message: string }> {
+    const response = await apiClient.delete(`/api/v1/pdf/logs/${logId}`);
+    return response.data;
+  },
+
+  // Batch delete processing logs
+  async batchDeleteProcessingLogs(logIds: number[]): Promise<{ message: string }> {
+    const response = await apiClient.post('/api/v1/pdf/logs/batch-delete', logIds);
+    return response.data;
   },
 };
 

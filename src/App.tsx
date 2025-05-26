@@ -16,7 +16,9 @@ import {
   Trash2,
   Key,
   Shield,
-  LogOut
+  LogOut,
+  History,
+  Eye
 } from 'lucide-react';
 
 import { pdfApi, TranslateRequest, GeminiSettings } from './lib/api';
@@ -24,6 +26,8 @@ import { useTranslation, Language, getAvailableLanguages } from './lib/i18n';
 import ApiKeysManager from './components/ApiKeysManager';
 import AuthCheck from './components/AuthCheck';
 import AdminDashboard from './components/AdminDashboard';
+import TranslationHistory from './components/TranslationHistory';
+import PdfPreview from './components/PdfPreview';
 import { useClientApiKeys } from './hooks/useClientApiKeys';
 import { getCurrentUser, isAdmin, logout } from './lib/auth';
 
@@ -42,13 +46,15 @@ const PDFTranslator: React.FC = () => {
   // UI State
   const [currentLanguage, setCurrentLanguage] = useState<Language>('zh');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [sourceLang, setSourceLang] = useState<string>('en');
-  const [targetLang, setTargetLang] = useState<string>('zh');
+  const [sourceLang, setSourceLang] = useState<string>('english');
+  const [targetLang, setTargetLang] = useState<string>('simplified-chinese');
   const [dualMode, setDualMode] = useState<boolean>(false);
-  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [currentLogId, setCurrentLogId] = useState<number | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   const [showApiKeysManager, setShowApiKeysManager] = useState<boolean>(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState<boolean>(false);
+  const [showTranslationHistory, setShowTranslationHistory] = useState<boolean>(false);
+  const [showPdfPreview, setShowPdfPreview] = useState<boolean>(false);
   const [useCustomGemini, setUseCustomGemini] = useState<boolean>(false);
   const [geminiSettings, setGeminiSettings] = useState<GeminiSettings>({
     apiKey: '',
@@ -80,29 +86,39 @@ const PDFTranslator: React.FC = () => {
   const translateMutation = useMutation({
     mutationFn: async (request: TranslateRequest) => {
       const result = await pdfApi.translatePdf(request);
-      setCurrentTaskId(result.task_id);
+      if (result.logId) {
+        setCurrentLogId(result.logId);
+      }
       return result;
+    },
+    onSuccess: () => {
+      // 翻译成功后，保存logId用于下载
     },
   });
 
   const downloadMutation = useMutation({
-    mutationFn: async (taskId: string) => {
-      const blob = await pdfApi.downloadPdf(taskId);
+    mutationFn: async (logId: number) => {
+      const blob = await pdfApi.downloadTranslatedPdf(logId);
       
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `translated_${taskId}.pdf`;
+      link.download = `translated_${selectedFile?.name || 'document'}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-
-      await pdfApi.cleanupFiles(taskId);
-      setCurrentTaskId(null);
-      setSelectedFile(null);
     },
   });
+
+  // 添加重置功能
+  const handleReset = () => {
+    setCurrentLogId(null);
+    setSelectedFile(null);
+    // 重置翻译状态
+    translateMutation.reset();
+    downloadMutation.reset();
+  };
 
   // Event Handlers
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -141,8 +157,8 @@ const PDFTranslator: React.FC = () => {
   };
 
   const handleDownload = () => {
-    if (!currentTaskId) return;
-    downloadMutation.mutate(currentTaskId);
+    if (!currentLogId) return;
+    downloadMutation.mutate(currentLogId);
   };
 
   // 修改这一行，强制服务为可用状态，忽略健康检查结果
@@ -178,6 +194,16 @@ const PDFTranslator: React.FC = () => {
     );
   }
 
+  // If Translation History is open, show it instead of the main interface
+  if (showTranslationHistory) {
+    return (
+      <TranslationHistory 
+        currentLanguage={currentLanguage}
+        onClose={() => setShowTranslationHistory(false)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -202,6 +228,16 @@ const PDFTranslator: React.FC = () => {
             
             {/* Header Actions */}
             <div className="flex items-center space-x-2">
+              {/* Translation History Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTranslationHistory(true)}
+              >
+                <History className="h-4 w-4 mr-2" />
+                翻译历史
+              </Button>
+
               {/* Admin Dashboard Button */}
               {userIsAdmin && (
                 <Button
@@ -492,9 +528,9 @@ const PDFTranslator: React.FC = () => {
           </Card>
 
           {/* Action Button */}
-          <Card>
-            <CardContent className="pt-6">
-              {!currentTaskId ? (
+          {!translateMutation.isSuccess && (
+            <Card>
+              <CardContent className="pt-6">
                 <Button
                   onClick={handleTranslate}
                   disabled={!selectedFile || !isServiceAvailable || translateMutation.isPending}
@@ -513,37 +549,81 @@ const PDFTranslator: React.FC = () => {
                     </>
                   )}
                 </Button>
-              ) : (
-                <Button
-                  onClick={handleDownload}
-                  disabled={downloadMutation.isPending}
-                  className="w-full h-12 text-lg"
-                  size="lg"
-                  variant="secondary"
-                >
-                  {downloadMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      {t.preparingDownload}
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-5 w-5 mr-2" />
-                      {t.downloadTranslatedPdf}
-                    </>
-                  )}
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Status Messages */}
           {translateMutation.isSuccess && (
             <Card className="border-green-200 bg-green-50">
               <CardContent className="pt-6">
-                <div className="flex items-center space-x-2 text-green-800">
-                  <CheckCircle className="h-5 w-5" />
-                  <p>{t.translationSuccess}</p>
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2 text-green-800">
+                    <CheckCircle className="h-5 w-5" />
+                    <p className="font-medium">{t.translationSuccess}</p>
+                  </div>
+                  
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={() => setShowPdfPreview(true)}
+                      disabled={!currentLogId}
+                      className="flex-1"
+                      size="lg"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      预览PDF
+                    </Button>
+                    
+                    <Button
+                      onClick={handleDownload}
+                      disabled={downloadMutation.isPending || !currentLogId}
+                      className="flex-1"
+                      size="lg"
+                      variant="outline"
+                    >
+                      {downloadMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {t.preparingDownload}
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          下载PDF
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  <div className="flex justify-center">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setShowTranslationHistory(true)}
+                      size="sm"
+                    >
+                      <History className="h-4 w-4 mr-2" />
+                      查看翻译历史
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium">💡 提示</p>
+                      <p>翻译记录已保存到历史中，您可以随时查看和重新下载</p>
+                    </div>
+                  </div>
+                  
+                  {/* Reset button */}
+                  <div className="pt-2 border-t border-green-200">
+                    <Button
+                      variant="ghost"
+                      onClick={handleReset}
+                      className="w-full text-green-700 hover:bg-green-100"
+                    >
+                      开始新的翻译
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -578,6 +658,17 @@ const PDFTranslator: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* PDF Preview Modal */}
+      {showPdfPreview && currentLogId && selectedFile && (
+        <PdfPreview
+          logId={currentLogId}
+          fileName={selectedFile.name}
+          onClose={() => setShowPdfPreview(false)}
+          onDownload={handleDownload}
+          downloadPending={downloadMutation.isPending}
+        />
+      )}
     </div>
   );
 };
