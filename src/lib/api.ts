@@ -228,17 +228,35 @@ export interface ProcessingLog {
   timestamp: string;
 }
 
+// Processing Status types
+export interface ProcessingStatus {
+  task_id: string;
+  status: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILURE' | 'CANCELLED';
+  progress: number;
+  message: string;
+  stage?: string;
+  current_page?: number;
+  total_pages?: number;
+  stage_current?: number;
+  stage_total?: number;
+  started_at?: string;
+  completed_at?: string;
+  processing_time?: number;
+  result?: any;
+  error?: string;
+}
+
 // API functions
 export const pdfApi = {
   // Health check
   async healthCheck(): Promise<HealthResponse> {
-    const response = await apiClient.get('/health');
+    const response = await apiClient.get('/api/v1/health');
     return response.data;
   },
 
   // Get supported languages
   async getSupportedLanguages(): Promise<LanguagesResponse> {
-    const response = await apiClient.get('/api/v1/supported-languages');
+    const response = await apiClient.get('/api/v1/languages');
     return response.data;
   },
 
@@ -250,7 +268,6 @@ export const pdfApi = {
     formData.append('target_lang', request.target_lang);
     formData.append('dual', request.dual.toString());
     
-    // Add Gemini settings if provided
     if (request.gemini_settings) {
       if (request.gemini_settings.apiKey) {
         formData.append('gemini_api_key', request.gemini_settings.apiKey);
@@ -260,44 +277,18 @@ export const pdfApi = {
       }
     }
 
-    try {
-      console.log('发送翻译请求到:', `${API_BASE_URL}/api/v1/translate`, '请求数据:', {
-        source_lang: request.source_lang,
-        target_lang: request.target_lang,
-        dual: request.dual,
-        file_name: request.file.name,
-        file_size: request.file.size,
-        gemini_model: request.gemini_settings?.model
-      });
-      
-      const response = await apiClient.post('/api/v1/translate', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      
-      console.log('翻译响应:', response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error('翻译请求错误:', error);
-      
-      // 详细记录错误信息
-      if (error.response) {
-        // 服务器返回了错误状态码
-        console.error('错误状态码:', error.response.status);
-        console.error('错误响应数据:', error.response.data);
-        console.error('错误响应头:', error.response.headers);
-        throw new Error(`服务器错误 (${error.response.status}): ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        // 请求已发送但没有收到响应
-        console.error('没有收到响应:', error.request);
-        throw new Error('服务器未响应，请检查网络连接或服务器状态');
-      } else {
-        // 设置请求时发生错误
-        console.error('请求错误:', error.message);
-        throw new Error(`请求错误: ${error.message}`);
-      }
-    }
+    const response = await apiClient.post('/api/v1/pdf/translate', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Get processing status
+  async getProcessingStatus(taskId: string): Promise<ProcessingStatus> {
+    const response = await apiClient.get(`/api/v1/pdf/status/${taskId}`);
+    return response.data;
   },
 
   // Download translated PDF

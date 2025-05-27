@@ -28,7 +28,9 @@ import AuthCheck from './components/AuthCheck';
 import AdminDashboard from './components/AdminDashboard';
 import TranslationHistory from './components/TranslationHistory';
 import PdfPreview from './components/PdfPreview';
+import ProcessingStatusDisplay from './components/ProcessingStatusDisplay';
 import { useClientApiKeys } from './hooks/useClientApiKeys';
+import { useProcessingStatus } from './hooks/useProcessingStatus';
 import { getCurrentUser, isAdmin, logout } from './lib/auth';
 
 import { Button } from './components/ui/button';
@@ -50,6 +52,7 @@ const PDFTranslator: React.FC = () => {
   const [targetLang, setTargetLang] = useState<string>('simplified-chinese');
   const [dualMode, setDualMode] = useState<boolean>(false);
   const [currentLogId, setCurrentLogId] = useState<number | null>(null);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   const [showApiKeysManager, setShowApiKeysManager] = useState<boolean>(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState<boolean>(false);
@@ -82,17 +85,40 @@ const PDFTranslator: React.FC = () => {
   // Client API Keys
   const { apiKeys: clientApiKeys } = useClientApiKeys();
 
+  // Processing Status Hook
+  const {
+    status: processingStatus,
+    isLoading: statusLoading,
+    error: statusError
+  } = useProcessingStatus({
+    taskId: currentTaskId,
+    enabled: !!currentTaskId,
+    onComplete: (result) => {
+      if (result.logId) {
+        setCurrentLogId(result.logId);
+      }
+      setCurrentTaskId(null);
+    },
+    onError: (error) => {
+      console.error('Processing failed:', error);
+      setCurrentTaskId(null);
+    }
+  });
+
   // Mutations
   const translateMutation = useMutation({
     mutationFn: async (request: TranslateRequest) => {
       const result = await pdfApi.translatePdf(request);
-      if (result.logId) {
+      if (result.task_id) {
+        setCurrentTaskId(result.task_id);
+      } else if (result.logId) {
+        // Direct completion without async processing
         setCurrentLogId(result.logId);
       }
       return result;
     },
     onSuccess: () => {
-      // 翻译成功后，保存logId用于下载
+      // Translation request submitted successfully
     },
   });
 
@@ -114,6 +140,7 @@ const PDFTranslator: React.FC = () => {
   // 添加重置功能
   const handleReset = () => {
     setCurrentLogId(null);
+    setCurrentTaskId(null);
     setSelectedFile(null);
     // 重置翻译状态
     translateMutation.reset();
@@ -528,7 +555,7 @@ const PDFTranslator: React.FC = () => {
           </Card>
 
           {/* Action Button */}
-          {!translateMutation.isSuccess && (
+          {!translateMutation.isSuccess && !currentTaskId && (
             <Card>
               <CardContent className="pt-6">
                 <Button
@@ -551,6 +578,16 @@ const PDFTranslator: React.FC = () => {
                 </Button>
               </CardContent>
             </Card>
+          )}
+
+          {/* Processing Status Display */}
+          {currentTaskId && (
+            <ProcessingStatusDisplay
+              status={processingStatus || null}
+              isLoading={statusLoading}
+              error={statusError}
+              fileName={selectedFile?.name}
+            />
           )}
 
           {/* Status Messages */}
