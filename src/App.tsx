@@ -1,14 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
 import { 
   FileText, 
   Upload, 
   Download, 
-  Settings, 
-  ChevronDown, 
-  ChevronUp, 
-  Globe, 
   Loader2,
   CheckCircle,
   XCircle,
@@ -18,55 +14,68 @@ import {
   Shield,
   LogOut,
   History,
-  Eye
+  Eye,
+  Play,
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react';
 
-import { pdfApi, TranslateRequest, GeminiSettings } from './lib/api';
-import { useTranslation, Language, getAvailableLanguages } from './lib/i18n';
+import { 
+  pdfApi, 
+  AdvancedTranslateRequest, 
+  ValidationResponse
+} from './lib/api';
+import { useTranslation, Language as UILanguage, getAvailableLanguages } from './lib/i18n';
 import ApiKeysManager from './components/ApiKeysManager';
 import AuthCheck from './components/AuthCheck';
 import AdminDashboard from './components/AdminDashboard';
 import TranslationHistory from './components/TranslationHistory';
 import PdfPreview from './components/PdfPreview';
-import ProcessingStatusDisplay from './components/ProcessingStatusDisplay';
+import EnhancedStatusDisplay from './components/EnhancedStatusDisplay';
+import AdvancedOptionsPanel from './components/AdvancedOptionsPanel';
 import { useClientApiKeys } from './hooks/useClientApiKeys';
 import { useProcessingStatus } from './hooks/useProcessingStatus';
 import { getCurrentUser, isAdmin, logout } from './lib/auth';
 
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
-import { Input } from './components/ui/input';
-import { Label } from './components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
-import { Switch } from './components/ui/switch';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger } from './components/ui/select';
+import { Badge } from './components/ui/badge';
 
 // Create a query client
 const queryClient = new QueryClient();
 
 const PDFTranslator: React.FC = () => {
   // UI State
-  const [currentLanguage, setCurrentLanguage] = useState<Language>('zh');
+  const [currentLanguage, setCurrentLanguage] = useState<UILanguage>('zh');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [sourceLang, setSourceLang] = useState<string>('english');
-  const [targetLang, setTargetLang] = useState<string>('simplified-chinese');
-  const [dualMode, setDualMode] = useState<boolean>(false);
   const [currentLogId, setCurrentLogId] = useState<number | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
+  const [processingStartTime, setProcessingStartTime] = useState<Date | null>(null);
+  
+  // Modal states
   const [showApiKeysManager, setShowApiKeysManager] = useState<boolean>(false);
   const [showAdminDashboard, setShowAdminDashboard] = useState<boolean>(false);
   const [showTranslationHistory, setShowTranslationHistory] = useState<boolean>(false);
   const [showPdfPreview, setShowPdfPreview] = useState<boolean>(false);
-  const [useCustomGemini, setUseCustomGemini] = useState<boolean>(false);
-  const [geminiSettings, setGeminiSettings] = useState<GeminiSettings>({
-    apiKey: '',
-    model: 'gemini-2.5-flash-preview-05-20',
+
+  // Advanced options state
+  const [advancedOptions, setAdvancedOptions] = useState<Partial<AdvancedTranslateRequest>>({
+    source_lang: 'auto',
+    target_lang: 'simplified-chinese',
+    dual: false,
+    translation_engine: 'auto',
+    requests_per_second: 4,
+    min_text_length: 1,
+    ignore_cache: false,
+    short_line_split_factor: 0.5,
+    max_pages_per_part: 0
   });
+
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
 
   const currentUser = getCurrentUser();
   const userIsAdmin = isAdmin();
-
   const t = useTranslation(currentLanguage);
   const availableLanguages = getAvailableLanguages();
 
@@ -74,6 +83,29 @@ const PDFTranslator: React.FC = () => {
   const { data: languagesData } = useQuery({
     queryKey: ['languages'],
     queryFn: pdfApi.getSupportedLanguages,
+  });
+
+  const { data: translationEnginesData } = useQuery({
+    queryKey: ['translation-engines'],
+    queryFn: pdfApi.getTranslationEngines,
+  });
+
+  const { data: userLimitsData } = useQuery({
+    queryKey: ['user-limits'],
+    queryFn: pdfApi.getUserLimits,
+    enabled: !!currentUser,
+  });
+
+  const { data: defaultSettingsData } = useQuery({
+    queryKey: ['default-settings'],
+    queryFn: pdfApi.getDefaultSettings,
+    enabled: !!currentUser,
+  });
+
+  const { data: presetConfigurationsData } = useQuery({
+    queryKey: ['preset-configurations'],
+    queryFn: pdfApi.getPresetConfigurations,
+    enabled: !!currentUser,
   });
 
   const { isLoading: healthLoading } = useQuery({
@@ -98,19 +130,66 @@ const PDFTranslator: React.FC = () => {
         setCurrentLogId(result.logId);
       }
       setCurrentTaskId(null);
+      setProcessingStartTime(null);
     },
     onError: (error) => {
       console.error('Processing failed:', error);
       setCurrentTaskId(null);
+      setProcessingStartTime(null);
     }
   });
 
-  // Mutations
+  // Validation mutation
+  const validateOptionsMutation = useMutation({
+    mutationFn: async (options: Partial<AdvancedTranslateRequest>) => {
+      // Convert to TranslationOptions format for validation
+      const translationOptions = {
+        translate_enabled: true,
+        source_language: options.source_lang,
+        target_language: options.target_lang,
+        dual_language: options.dual,
+        advanced_translation: {
+          translation_engine: options.translation_engine,
+          custom_prompt: options.custom_prompt,
+          custom_system_prompt: options.custom_system_prompt,
+          requests_per_second: options.requests_per_second,
+          min_text_length: options.min_text_length,
+          ignore_cache: options.ignore_cache,
+          rpc_doclayout: options.rpc_doclayout
+        },
+        advanced_pdf: {
+          pages: options.pages,
+          no_mono: options.no_mono,
+          no_dual: options.no_dual,
+          dual_translate_first: options.dual_translate_first,
+          use_alternating_pages_dual: options.use_alternating_pages_dual,
+          skip_clean: options.skip_clean,
+          disable_rich_text_translate: options.disable_rich_text_translate,
+          enhance_compatibility: options.enhance_compatibility,
+          split_short_lines: options.split_short_lines,
+          short_line_split_factor: options.short_line_split_factor,
+          translate_table_text: options.translate_table_text,
+          skip_scanned_detection: options.skip_scanned_detection,
+          ocr_workaround: options.ocr_workaround,
+          max_pages_per_part: options.max_pages_per_part,
+          formular_font_pattern: options.formular_font_pattern,
+          formular_char_pattern: options.formular_char_pattern
+        }
+      };
+      return await pdfApi.validateTranslationOptions(translationOptions);
+    },
+    onSuccess: (data: ValidationResponse) => {
+      setValidationWarnings(data.warnings || []);
+    }
+  });
+
+  // Translation mutation
   const translateMutation = useMutation({
-    mutationFn: async (request: TranslateRequest) => {
-      const result = await pdfApi.translatePdf(request);
+    mutationFn: async (request: AdvancedTranslateRequest) => {
+      const result = await pdfApi.translatePdfAdvanced(request);
       if (result.task_id) {
         setCurrentTaskId(result.task_id);
+        setProcessingStartTime(new Date());
       } else if (result.logId) {
         // Direct completion without async processing
         setCurrentLogId(result.logId);
@@ -137,20 +216,33 @@ const PDFTranslator: React.FC = () => {
     },
   });
 
-  // 添加重置功能
-  const handleReset = () => {
-    setCurrentLogId(null);
-    setCurrentTaskId(null);
-    setSelectedFile(null);
-    // 重置翻译状态
-    translateMutation.reset();
-    downloadMutation.reset();
-  };
+  // Load default settings on mount
+  useEffect(() => {
+    if (defaultSettingsData?.default_settings) {
+      setAdvancedOptions(prev => ({
+        ...prev,
+        ...defaultSettingsData.default_settings
+      }));
+    }
+  }, [defaultSettingsData]);
+
+  // Validate options when they change
+  useEffect(() => {
+    if (selectedFile && Object.keys(advancedOptions).length > 0) {
+      validateOptionsMutation.mutate(advancedOptions);
+    }
+  }, [advancedOptions, selectedFile]);
 
   // Event Handlers
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       setSelectedFile(acceptedFiles[0]);
+      // Reset previous results
+      setCurrentLogId(null);
+      setCurrentTaskId(null);
+      setProcessingStartTime(null);
+      translateMutation.reset();
+      downloadMutation.reset();
     }
   }, []);
 
@@ -163,22 +255,13 @@ const PDFTranslator: React.FC = () => {
   });
 
   const handleTranslate = () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !advancedOptions.target_lang) return;
 
-    const request: TranslateRequest = {
+    const request: AdvancedTranslateRequest = {
       file: selectedFile,
-      source_lang: sourceLang,
-      target_lang: targetLang,
-      dual: dualMode,
+      target_lang: advancedOptions.target_lang,
+      ...advancedOptions
     };
-
-    // Use client API keys if available, otherwise fall back to legacy custom Gemini settings
-    if (clientApiKeys.hasCustomKeys && clientApiKeys.defaultGeminiKey) {
-      // Backend will automatically use the user's configured API keys
-      // No need to pass them explicitly in the request
-    } else if (useCustomGemini && (geminiSettings.apiKey || geminiSettings.model)) {
-      request.gemini_settings = geminiSettings;
-    }
 
     translateMutation.mutate(request);
   };
@@ -188,18 +271,55 @@ const PDFTranslator: React.FC = () => {
     downloadMutation.mutate(currentLogId);
   };
 
-  // 修改这一行，强制服务为可用状态，忽略健康检查结果
-  //const isServiceAvailable = healthData?.pdftranslate_available ?? false;
-  const isServiceAvailable = true; // 强制服务为可用
-  const languages = languagesData?.languages ?? {};
+  const handleReset = () => {
+    setCurrentLogId(null);
+    setCurrentTaskId(null);
+    setSelectedFile(null);
+    setProcessingStartTime(null);
+    setValidationWarnings([]);
+    translateMutation.reset();
+    downloadMutation.reset();
+  };
 
-  // Handle logout
+  const handleOptionsChange = (newOptions: Partial<AdvancedTranslateRequest>) => {
+    setAdvancedOptions(newOptions);
+  };
+
+  const handleLoadPreset = async (presetId: string) => {
+    if (!presetConfigurationsData?.presets[presetId]) return;
+    
+    const presetSettings = presetConfigurationsData.presets[presetId].settings;
+    setAdvancedOptions(prev => ({
+      ...prev,
+      ...presetSettings
+    }));
+  };
+
+  const handleResetOptions = () => {
+    if (defaultSettingsData?.default_settings) {
+      setAdvancedOptions(defaultSettingsData.default_settings);
+    }
+  };
+
   const handleLogout = () => {
-                    logout();
+    logout();
     window.location.reload();
   };
 
-  // If Admin Dashboard is open, show it instead of the main interface
+  // Service availability
+  const isServiceAvailable = true; // Force service as available
+
+  // Data processing
+  const languages = languagesData?.languages || [];
+  const translationEngines = translationEnginesData?.engines || [];
+  const availablePresets = presetConfigurationsData ? 
+    Object.entries(presetConfigurationsData.presets).map(([id, preset]) => ({
+      id,
+      name: preset.name,
+      description: preset.description
+    })) : [];
+
+  // Modal handlers
   if (showAdminDashboard && userIsAdmin) {
     return (
       <AdminDashboard 
@@ -210,7 +330,6 @@ const PDFTranslator: React.FC = () => {
     );
   }
 
-  // If API Keys Manager is open, show it instead of the main interface
   if (showApiKeysManager) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -221,7 +340,6 @@ const PDFTranslator: React.FC = () => {
     );
   }
 
-  // If Translation History is open, show it instead of the main interface
   if (showTranslationHistory) {
     return (
       <TranslationHistory 
@@ -233,39 +351,58 @@ const PDFTranslator: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-40">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="p-3 bg-primary/10 rounded-xl">
-                <FileText className="h-8 w-8 text-primary" />
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <FileText className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-foreground">{t.title}</h1>
-                <p className="text-muted-foreground">{t.subtitle}</p>
-                {currentUser && (
-                  <p className="text-sm text-muted-foreground">
-                    Welcome, {currentUser.name || currentUser.email}
-                    {userIsAdmin && <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-xs rounded">Admin</span>}
-                  </p>
-                )}
+                <h1 className="text-xl font-bold text-foreground">{t.title}</h1>
+                <p className="text-sm text-muted-foreground">{t.subtitle}</p>
               </div>
             </div>
             
             {/* Header Actions */}
             <div className="flex items-center space-x-2">
-              {/* Translation History Button */}
+              {/* User Info */}
+              {currentUser && (
+                <div className="text-right mr-4">
+                  <p className="text-sm font-medium">{currentUser.name || currentUser.email}</p>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline" className="text-xs">
+                      {currentUser.tier}
+                    </Badge>
+                    {userIsAdmin && (
+                      <Badge variant="destructive" className="text-xs">
+                        Admin
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowTranslationHistory(true)}
               >
                 <History className="h-4 w-4 mr-2" />
-                翻译历史
+                History
               </Button>
 
-              {/* Admin Dashboard Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowApiKeysManager(true)}
+              >
+                <Key className="h-4 w-4 mr-2" />
+                API Keys
+              </Button>
+
               {userIsAdmin && (
                 <Button
                   variant="outline"
@@ -278,12 +415,9 @@ const PDFTranslator: React.FC = () => {
               )}
               
               {/* Language Toggle */}
-              <Select value={currentLanguage} onValueChange={(value: Language) => setCurrentLanguage(value)}>
-                <SelectTrigger className="w-32">
-                  <div className="flex items-center space-x-2">
-                    <Languages className="h-4 w-4" />
-                    <SelectValue />
-                  </div>
+              <Select value={currentLanguage} onValueChange={(value: UILanguage) => setCurrentLanguage(value)}>
+                <SelectTrigger className="w-24">
+                  <Languages className="h-4 w-4" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableLanguages.map((lang) => (
@@ -294,405 +428,260 @@ const PDFTranslator: React.FC = () => {
                 </SelectContent>
               </Select>
 
-              {/* Logout Button */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleLogout}
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </div>
-
-          {/* Service Status */}
-          <Card className="mb-6">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-center space-x-3">
-                {healthLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">{t.checkingStatus}</span>
-                  </>
-                ) : (
-                  <>
-                    {isServiceAvailable ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                    <span className="text-sm font-medium">
-                      {t.serviceStatus}: {isServiceAvailable ? t.serviceAvailable : t.serviceUnavailable}
-                    </span>
-                    {clientApiKeys.hasCustomKeys && (
-                      <>
-                        <span className="text-muted-foreground">•</span>
-                        <Key className="h-4 w-4 text-blue-500" />
-                        <span className="text-sm text-blue-600">Custom API Keys Active</span>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-              {!isServiceAvailable && !healthLoading && (
-                <p className="text-sm text-red-600 mt-2 text-center">{t.serviceUnavailableMessage}</p>
-              )}
-            </CardContent>
-          </Card>
         </div>
+      </div>
 
-        {/* Main Content */}
-        <div className="space-y-6">
-          {/* File Upload */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Upload className="h-5 w-5" />
-                <span>PDF {t.clickToSelect}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                {...getRootProps()}
-                className={`
-                  border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200
-                  ${isDragActive 
-                    ? 'border-primary bg-primary/5 scale-105' 
-                    : 'border-border hover:border-primary/50 hover:bg-accent/50'
-                  }
-                  ${!isServiceAvailable ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-              >
-                <input {...getInputProps()} disabled={!isServiceAvailable} />
-                {selectedFile ? (
-                  <div className="space-y-3">
-                    <FileText className="h-12 w-12 text-primary mx-auto" />
-                    <div>
-                      <p className="text-lg font-medium text-foreground">{selectedFile.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFile(null);
-                      }}
-                      className="mt-2"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      {t.removeFile}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <Upload className="h-12 w-12 text-muted-foreground mx-auto" />
-                    <div>
-                      <p className="text-lg text-foreground">
-                        {isDragActive ? t.dropFileHereActive : t.dropFileHere}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{t.onlyPdfSupported}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Translation Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Globe className="h-5 w-5" />
-                <span>{t.sourceLanguage} & {t.targetLanguage}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="source-lang">{t.sourceLanguage}</Label>
-                  <Select value={sourceLang} onValueChange={setSourceLang}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(languages).map(([code, name]) => (
-                        <SelectItem key={code} value={code}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+      {/* Main Content - Dual Column Layout */}
+      <div className="container mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-140px)]">
+          
+          {/* Left Column - Controls & Upload */}
+          <div className="space-y-4 overflow-y-auto">
+            {/* Service Status */}
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-center space-x-3">
+                  {healthLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Checking status...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm font-medium">Service Available</span>
+                      {clientApiKeys.hasCustomKeys && (
+                        <>
+                          <span className="text-muted-foreground">•</span>
+                          <Key className="h-4 w-4 text-blue-500" />
+                          <span className="text-sm text-blue-600">Custom Keys Active</span>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
+              </CardContent>
+            </Card>
 
-                <div className="space-y-2">
-                  <Label htmlFor="target-lang">{t.targetLanguage}</Label>
-                  <Select value={targetLang} onValueChange={setTargetLang}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(languages).map(([code, name]) => (
-                        <SelectItem key={code} value={code}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="space-y-1">
-                  <Label className="text-base font-medium">{t.dualLanguageMode}</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {dualMode ? t.showBothLanguages : t.targetLanguageOnly}
-                  </p>
-                </div>
-                <Switch checked={dualMode} onCheckedChange={setDualMode} />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Advanced Settings */}
-          <Card>
-            <Collapsible open={showAdvancedSettings} onOpenChange={setShowAdvancedSettings}>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors">
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Settings className="h-5 w-5" />
-                      <span>{t.advancedSettings}</span>
-                    </div>
-                    {showAdvancedSettings ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </CardTitle>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="space-y-4">
-                  {/* API Keys Management */}
-                  <div className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <Label className="text-base font-medium flex items-center space-x-2">
-                          <Key className="h-4 w-4" />
-                          <span>{t.apiKeysManagement}</span>
-                          {clientApiKeys.hasCustomKeys && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
-                              {clientApiKeys.geminiKeys.length + clientApiKeys.openrouterKeys.length} {t.keysConfigured}
-                            </span>
-                          )}
-                        </Label>
+            {/* File Upload */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center space-x-2 text-base">
+                  <Upload className="h-4 w-4" />
+                  <span>Upload PDF</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div
+                  {...getRootProps()}
+                  className={`
+                    border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-200
+                    ${isDragActive 
+                      ? 'border-primary bg-primary/5 scale-105' 
+                      : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                    }
+                    ${!isServiceAvailable ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
+                >
+                  <input {...getInputProps()} disabled={!isServiceAvailable} />
+                  {selectedFile ? (
+                    <div className="space-y-3">
+                      <FileText className="h-8 w-8 text-primary mx-auto" />
+                      <div>
+                        <p className="font-medium text-foreground">{selectedFile.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {clientApiKeys.hasCustomKeys 
-                            ? `${t.usingCustomKeysDescription}. ${clientApiKeys.defaultGeminiKey ? 'Gemini' : 'No Gemini'} ${clientApiKeys.defaultOpenrouterKey ? '+ OpenRouter' : ''} configured.`
-                            : t.manageKeysDescription
-                          }
+                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                         </p>
                       </div>
                       <Button
-                        variant={clientApiKeys.hasCustomKeys ? "default" : "outline"}
-                        onClick={() => setShowApiKeysManager(true)}
-                        className="flex items-center space-x-2"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                        }}
                       >
-                        <Settings className="h-4 w-4" />
-                        <span>{clientApiKeys.hasCustomKeys ? t.manageApiKeys : t.addApiKeys}</span>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Remove
                       </Button>
                     </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <Label className="text-base font-medium">{t.useCustomGemini}</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Use your own Gemini API key and model settings (Legacy)
-                      </p>
-                    </div>
-                    <Switch checked={useCustomGemini} onCheckedChange={setUseCustomGemini} />
-                  </div>
-
-                  {useCustomGemini && (
-                    <div className="space-y-4 p-4 bg-accent/20 rounded-lg">
-                      <div className="space-y-2">
-                        <Label htmlFor="gemini-api-key">{t.geminiApiKey}</Label>
-                        <Input
-                          id="gemini-api-key"
-                          type="password"
-                          placeholder={t.geminiApiKeyPlaceholder}
-                          value={geminiSettings.apiKey || ''}
-                          onChange={(e) => setGeminiSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="gemini-model">{t.geminiModel}</Label>
-                        <Select 
-                          value={geminiSettings.model || 'gemini-2.5-flash-preview-05-20'} 
-                          onValueChange={(value) => setGeminiSettings(prev => ({ ...prev, model: value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</SelectItem>
-                            <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
-                            <SelectItem value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</SelectItem>
-                            <SelectItem value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  ) : (
+                    <div className="space-y-3">
+                      <Upload className="h-8 w-8 text-muted-foreground mx-auto" />
+                      <div>
+                        <p className="text-foreground">
+                          {isDragActive ? 'Drop PDF here...' : 'Drag & drop PDF or click to select'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Only PDF files are supported</p>
                       </div>
                     </div>
                   )}
-                </CardContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* Action Button */}
-          {!translateMutation.isSuccess && !currentTaskId && (
-            <Card>
-              <CardContent className="pt-6">
+            {/* Validation Warnings */}
+            {validationWarnings.length > 0 && (
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="pt-4">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800">Configuration Warnings</p>
+                      <ul className="text-sm text-yellow-700 mt-1 space-y-1">
+                        {validationWarnings.map((warning, index) => (
+                          <li key={index}>• {warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Advanced Options Panel */}
+            <AdvancedOptionsPanel
+              options={advancedOptions}
+              onOptionsChange={handleOptionsChange}
+              translationEngines={translationEngines}
+              languages={languages}
+              userLimits={userLimitsData}
+              onReset={handleResetOptions}
+              onLoadPreset={handleLoadPreset}
+              availablePresets={availablePresets}
+            />
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              {!translateMutation.isSuccess && !currentTaskId && (
                 <Button
                   onClick={handleTranslate}
                   disabled={!selectedFile || !isServiceAvailable || translateMutation.isPending}
-                  className="w-full h-12 text-lg"
+                  className="w-full"
                   size="lg"
                 >
                   {translateMutation.isPending ? (
                     <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      {t.translating}
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Starting Translation...
                     </>
                   ) : (
                     <>
-                      <Globe className="h-5 w-5 mr-2" />
-                      {t.translatePdf}
+                      <Play className="h-4 w-4 mr-2" />
+                      Start Translation
                     </>
                   )}
                 </Button>
-              </CardContent>
-            </Card>
-          )}
+              )}
 
-          {/* Processing Status Display */}
-          {currentTaskId && (
-            <ProcessingStatusDisplay
-              status={processingStatus || null}
-              isLoading={statusLoading}
-              error={statusError}
-              fileName={selectedFile?.name}
-            />
-          )}
-
-          {/* Status Messages */}
-          {translateMutation.isSuccess && (
-            <Card className="border-green-200 bg-green-50">
-              <CardContent className="pt-6">
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2 text-green-800">
-                    <CheckCircle className="h-5 w-5" />
-                    <p className="font-medium">{t.translationSuccess}</p>
-                  </div>
+              {(translateMutation.isSuccess || currentLogId) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => setShowPdfPreview(true)}
+                    disabled={!currentLogId}
+                    variant="outline"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview
+                  </Button>
                   
-                  {/* Action buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Button
-                      onClick={() => setShowPdfPreview(true)}
-                      disabled={!currentLogId}
-                      className="flex-1"
-                      size="lg"
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      预览PDF
-                    </Button>
+                  <Button
+                    onClick={handleDownload}
+                    disabled={downloadMutation.isPending || !currentLogId}
+                  >
+                    {downloadMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Preparing...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {(translateMutation.isSuccess || translateMutation.isError) && (
+                <Button
+                  variant="ghost"
+                  onClick={handleReset}
+                  className="w-full"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Start New Translation
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column - Status & Preview */}
+          <div className="space-y-4 overflow-y-auto">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center space-x-2 text-base">
+                  <Eye className="h-4 w-4" />
+                  <span>Status & Preview</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                                 <EnhancedStatusDisplay
+                   status={processingStatus || null}
+                   isLoading={statusLoading}
+                   error={statusError || translateMutation.error}
+                   fileName={selectedFile?.name}
+                   fileSize={selectedFile?.size}
+                   startTime={processingStartTime || undefined}
+                 />
+
+                {/* Success Actions */}
+                {translateMutation.isSuccess && currentLogId && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center space-x-2 text-green-800 mb-3">
+                      <CheckCircle className="h-4 w-4" />
+                      <p className="font-medium">Translation completed successfully!</p>
+                    </div>
                     
-                    <Button
-                      onClick={handleDownload}
-                      disabled={downloadMutation.isPending || !currentLogId}
-                      className="flex-1"
-                      size="lg"
-                      variant="outline"
-                    >
-                      {downloadMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          {t.preparingDownload}
-                        </>
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4 mr-2" />
-                          下载PDF
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  
-                  <div className="flex justify-center">
-                    <Button
-                      variant="ghost"
-                      onClick={() => setShowTranslationHistory(true)}
-                      size="sm"
-                    >
-                      <History className="h-4 w-4 mr-2" />
-                      查看翻译历史
-                    </Button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="text-sm text-blue-800">
-                      <p className="font-medium">💡 提示</p>
-                      <p>翻译记录已保存到历史中，您可以随时查看和重新下载</p>
+                    <div className="space-y-2">
+                      <Button
+                        onClick={() => setShowTranslationHistory(true)}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-green-700 hover:bg-green-100"
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        View in Translation History
+                      </Button>
                     </div>
                   </div>
-                  
-                  {/* Reset button */}
-                  <div className="pt-2 border-t border-green-200">
-                    <Button
-                      variant="ghost"
-                      onClick={handleReset}
-                      className="w-full text-green-700 hover:bg-green-100"
-                    >
-                      开始新的翻译
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                )}
 
-          {translateMutation.isError && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="pt-6">
-                <div className="flex items-center space-x-2 text-red-800">
-                  <XCircle className="h-5 w-5" />
-                  <div>
-                    <p>{t.translationFailed}</p>
-                    <p className="text-sm mt-1 whitespace-pre-wrap break-words">{translateMutation.error?.message}</p>
+                {/* Error Display */}
+                {translateMutation.isError && (
+                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-center space-x-2 text-red-800">
+                      <XCircle className="h-4 w-4" />
+                      <div>
+                        <p className="font-medium">Translation failed</p>
+                        <p className="text-sm mt-1">{translateMutation.error?.message}</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
-          )}
-
-          {downloadMutation.isError && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="pt-6">
-                <div className="flex items-center space-x-2 text-red-800">
-                  <XCircle className="h-5 w-5" />
-                  <div>
-                    <p>{t.downloadFailed}</p>
-                    <p className="text-sm mt-1 whitespace-pre-wrap break-words">{downloadMutation.error?.message}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          </div>
         </div>
       </div>
       

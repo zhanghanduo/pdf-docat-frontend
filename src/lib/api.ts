@@ -45,12 +45,81 @@ export interface GeminiSettings {
   model?: string;
 }
 
+// Enhanced Translation Options
+export interface AdvancedTranslationOptions {
+  translation_engine?: string;
+  custom_prompt?: string;
+  custom_system_prompt?: string;
+  requests_per_second?: number;
+  min_text_length?: number;
+  ignore_cache?: boolean;
+  rpc_doclayout?: string;
+}
+
+export interface AdvancedPDFOptions {
+  pages?: string;
+  no_mono?: boolean;
+  no_dual?: boolean;
+  dual_translate_first?: boolean;
+  use_alternating_pages_dual?: boolean;
+  skip_clean?: boolean;
+  disable_rich_text_translate?: boolean;
+  enhance_compatibility?: boolean;
+  split_short_lines?: boolean;
+  short_line_split_factor?: number;
+  translate_table_text?: boolean;
+  skip_scanned_detection?: boolean;
+  ocr_workaround?: boolean;
+  max_pages_per_part?: number;
+  formular_font_pattern?: string;
+  formular_char_pattern?: string;
+}
+
+export interface TranslationOptions {
+  translate_enabled?: boolean;
+  source_language?: string;
+  target_language?: string;
+  dual_language?: boolean;
+  advanced_translation?: AdvancedTranslationOptions;
+  advanced_pdf?: AdvancedPDFOptions;
+}
+
 export interface TranslateRequest {
   file: File;
   source_lang: string;
   target_lang: string;
   dual: boolean;
   gemini_settings?: GeminiSettings;
+}
+
+export interface AdvancedTranslateRequest {
+  file: File;
+  source_lang?: string;
+  target_lang: string;
+  dual?: boolean;
+  translation_engine?: string;
+  custom_prompt?: string;
+  custom_system_prompt?: string;
+  requests_per_second?: number;
+  min_text_length?: number;
+  ignore_cache?: boolean;
+  rpc_doclayout?: string;
+  pages?: string;
+  no_mono?: boolean;
+  no_dual?: boolean;
+  dual_translate_first?: boolean;
+  use_alternating_pages_dual?: boolean;
+  skip_clean?: boolean;
+  disable_rich_text_translate?: boolean;
+  enhance_compatibility?: boolean;
+  split_short_lines?: boolean;
+  short_line_split_factor?: number;
+  translate_table_text?: boolean;
+  skip_scanned_detection?: boolean;
+  ocr_workaround?: boolean;
+  max_pages_per_part?: number;
+  formular_font_pattern?: string;
+  formular_char_pattern?: string;
 }
 
 export interface TranslateResponse {
@@ -67,8 +136,69 @@ export interface HealthResponse {
   pdftranslate_available: boolean;
 }
 
+export interface Language {
+  code: string;
+  display_name: string;
+  native_name: string;
+}
+
 export interface LanguagesResponse {
-  languages: Record<string, string>;
+  languages: Language[];
+  total_count: number;
+}
+
+export interface TranslationEngine {
+  id: string;
+  name: string;
+  available: boolean;
+  settings?: Record<string, any>;
+}
+
+export interface TranslationEnginesResponse {
+  engines: TranslationEngine[];
+  recommended: string;
+  default: string;
+}
+
+export interface UserLimits {
+  limits: Record<string, any>;
+  features: Record<string, boolean>;
+  tier: string;
+}
+
+export interface ProcessingRecommendations {
+  recommended_engine: string;
+  estimated_time: number;
+  estimated_cost: number;
+  warnings: string[];
+  suggestions: string[];
+}
+
+export interface ValidationResponse {
+  valid: boolean;
+  validated_settings?: Record<string, any>;
+  warnings?: string[];
+  user_features?: Record<string, boolean>;
+  error?: string;
+}
+
+export interface DefaultSettings {
+  default_settings: Record<string, any>;
+  user_features: Record<string, boolean>;
+  tier: string;
+}
+
+export interface PresetConfiguration {
+  id: string;
+  name: string;
+  description: string;
+  settings: Record<string, any>;
+  tier_required: string;
+}
+
+export interface PresetConfigurationsResponse {
+  presets: Record<string, PresetConfiguration>;
+  user_tier: string;
 }
 
 // Client API Keys types
@@ -256,7 +386,45 @@ export const pdfApi = {
 
   // Get supported languages
   async getSupportedLanguages(): Promise<LanguagesResponse> {
-    const response = await apiClient.get('/api/v1/languages');
+    const response = await apiClient.get('/api/v1/pdf/supported-languages');
+    return response.data;
+  },
+
+  // Get translation engines
+  async getTranslationEngines(): Promise<TranslationEnginesResponse> {
+    const response = await apiClient.get('/api/v1/pdf/translation-engines');
+    return response.data;
+  },
+
+  // Get user limits
+  async getUserLimits(): Promise<UserLimits> {
+    const response = await apiClient.get('/api/v1/pdf/user-limits');
+    return response.data;
+  },
+
+  // Get default settings
+  async getDefaultSettings(): Promise<DefaultSettings> {
+    const response = await apiClient.get('/api/v1/pdf/default-settings');
+    return response.data;
+  },
+
+  // Get preset configurations
+  async getPresetConfigurations(): Promise<PresetConfigurationsResponse> {
+    const response = await apiClient.get('/api/v1/pdf/preset-configurations');
+    return response.data;
+  },
+
+  // Validate translation options
+  async validateTranslationOptions(options: TranslationOptions): Promise<ValidationResponse> {
+    const response = await apiClient.post('/api/v1/pdf/validate-options', options);
+    return response.data;
+  },
+
+  // Get processing recommendations
+  async getProcessingRecommendations(fileSize: number, pageCount: number): Promise<ProcessingRecommendations> {
+    const response = await apiClient.get('/api/v1/pdf/processing-recommendations', {
+      params: { file_size: fileSize, page_count: pageCount }
+    });
     return response.data;
   },
 
@@ -278,6 +446,51 @@ export const pdfApi = {
     }
 
     const response = await apiClient.post('/api/v1/pdf/translate', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Advanced Translate PDF
+  async translatePdfAdvanced(request: AdvancedTranslateRequest): Promise<TranslateResponse> {
+    const formData = new FormData();
+    formData.append('file', request.file);
+    
+    // Basic options
+    if (request.source_lang) formData.append('source_lang', request.source_lang);
+    formData.append('target_lang', request.target_lang);
+    if (request.dual !== undefined) formData.append('dual', request.dual.toString());
+    
+    // Advanced Translation Options
+    if (request.translation_engine) formData.append('translation_engine', request.translation_engine);
+    if (request.custom_prompt) formData.append('custom_prompt', request.custom_prompt);
+    if (request.custom_system_prompt) formData.append('custom_system_prompt', request.custom_system_prompt);
+    if (request.requests_per_second !== undefined) formData.append('requests_per_second', request.requests_per_second.toString());
+    if (request.min_text_length !== undefined) formData.append('min_text_length', request.min_text_length.toString());
+    if (request.ignore_cache !== undefined) formData.append('ignore_cache', request.ignore_cache.toString());
+    if (request.rpc_doclayout) formData.append('rpc_doclayout', request.rpc_doclayout);
+    
+    // Advanced PDF Options
+    if (request.pages) formData.append('pages', request.pages);
+    if (request.no_mono !== undefined) formData.append('no_mono', request.no_mono.toString());
+    if (request.no_dual !== undefined) formData.append('no_dual', request.no_dual.toString());
+    if (request.dual_translate_first !== undefined) formData.append('dual_translate_first', request.dual_translate_first.toString());
+    if (request.use_alternating_pages_dual !== undefined) formData.append('use_alternating_pages_dual', request.use_alternating_pages_dual.toString());
+    if (request.skip_clean !== undefined) formData.append('skip_clean', request.skip_clean.toString());
+    if (request.disable_rich_text_translate !== undefined) formData.append('disable_rich_text_translate', request.disable_rich_text_translate.toString());
+    if (request.enhance_compatibility !== undefined) formData.append('enhance_compatibility', request.enhance_compatibility.toString());
+    if (request.split_short_lines !== undefined) formData.append('split_short_lines', request.split_short_lines.toString());
+    if (request.short_line_split_factor !== undefined) formData.append('short_line_split_factor', request.short_line_split_factor.toString());
+    if (request.translate_table_text !== undefined) formData.append('translate_table_text', request.translate_table_text.toString());
+    if (request.skip_scanned_detection !== undefined) formData.append('skip_scanned_detection', request.skip_scanned_detection.toString());
+    if (request.ocr_workaround !== undefined) formData.append('ocr_workaround', request.ocr_workaround.toString());
+    if (request.max_pages_per_part !== undefined) formData.append('max_pages_per_part', request.max_pages_per_part.toString());
+    if (request.formular_font_pattern) formData.append('formular_font_pattern', request.formular_font_pattern);
+    if (request.formular_char_pattern) formData.append('formular_char_pattern', request.formular_char_pattern);
+
+    const response = await apiClient.post('/api/v1/pdf/translate-advanced', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

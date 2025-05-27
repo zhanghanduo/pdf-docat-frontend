@@ -81,7 +81,7 @@ export const useProcessingStatus = ({
   };
 
   return {
-    status,
+    status: status as ProcessingStatus | undefined,
     isLoading,
     error,
     isPolling,
