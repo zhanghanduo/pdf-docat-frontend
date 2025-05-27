@@ -21,6 +21,7 @@ import {
   Language,
   UserLimits 
 } from '../lib/api';
+import { useTranslation, Language as UILanguage } from '../lib/i18n';
 
 interface AdvancedOptionsPanelProps {
   options: Partial<AdvancedTranslateRequest>;
@@ -31,6 +32,7 @@ interface AdvancedOptionsPanelProps {
   onReset: () => void;
   onLoadPreset: (presetId: string) => void;
   availablePresets: Array<{ id: string; name: string; description: string }>;
+  currentLanguage: UILanguage;
 }
 
 const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
@@ -41,10 +43,12 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
   userLimits,
   onReset,
   onLoadPreset,
-  availablePresets
+  availablePresets,
+  currentLanguage
 }) => {
   const [showTranslationOptions, setShowTranslationOptions] = React.useState(false);
   const [showPdfOptions, setShowPdfOptions] = React.useState(false);
+  const t = useTranslation(currentLanguage);
 
   const updateOption = (key: keyof AdvancedTranslateRequest, value: any) => {
     onOptionsChange({ ...options, [key]: value });
@@ -64,7 +68,7 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
         {children}
         {!available && (
           <Badge variant="outline" className="ml-2 text-xs">
-            Pro Feature
+            {t.proFeature}
           </Badge>
         )}
       </div>
@@ -78,7 +82,7 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2 text-sm">
             <Zap className="h-4 w-4" />
-            <span>Quick Presets</span>
+            <span>{t.quickPresets}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -102,7 +106,7 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
             className="w-full text-xs"
           >
             <RotateCcw className="h-3 w-3 mr-1" />
-            Reset to Defaults
+            {t.resetToDefaults}
           </Button>
         </CardContent>
       </Card>
@@ -158,7 +162,7 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
           </div>
 
           <div className="flex items-center justify-between p-2 border rounded text-xs">
-            <Label>Dual Language Mode</Label>
+            <Label>{t.dualLanguageMode}</Label>
             <Switch 
               checked={options.dual || false} 
               onCheckedChange={(checked) => updateOption('dual', checked)}
@@ -166,7 +170,7 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs">Translation Engine</Label>
+            <Label className="text-xs">{t.translationEngine}</Label>
             <Select 
               value={options.translation_engine || 'auto'} 
               onValueChange={(value) => updateOption('translation_engine', value)}
@@ -179,7 +183,7 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
                   <SelectItem key={engine.id} value={engine.id} disabled={!engine.available}>
                     <div className="flex items-center space-x-2">
                       <span>{engine.name}</span>
-                      {!engine.available && <Badge variant="outline" className="text-xs">Unavailable</Badge>}
+                      {!engine.available && <Badge variant="outline" className="text-xs">{t.unavailable}</Badge>}
                     </div>
                   </SelectItem>
                 ))}
@@ -313,18 +317,10 @@ const AdvancedOptionsPanel: React.FC<AdvancedOptionsPanelProps> = ({
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex items-center justify-between p-2 border rounded">
-                  <Label>No Mono</Label>
+                  <Label>{t.noMono}</Label>
                   <Switch 
                     checked={options.no_mono || false} 
                     onCheckedChange={(checked) => updateOption('no_mono', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-2 border rounded">
-                  <Label>No Dual</Label>
-                  <Switch 
-                    checked={options.no_dual || false} 
-                    onCheckedChange={(checked) => updateOption('no_dual', checked)}
                   />
                 </div>
 

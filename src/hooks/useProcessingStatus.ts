@@ -35,8 +35,8 @@ export const useProcessingStatus = ({
   } = useQuery({
     queryKey: ['processing-status', taskId],
     queryFn: () => pdfApi.getProcessingStatus(taskId!),
-    enabled: enabled && !!taskId && isPolling,
-    refetchInterval: pollingInterval,
+    enabled: enabled && !!taskId,
+    refetchInterval: isPolling ? pollingInterval : false,
     retry: (failureCount, error: any) => {
       // Don't retry if task not found (404)
       if (error?.response?.status === 404) {
@@ -81,7 +81,7 @@ export const useProcessingStatus = ({
   };
 
   return {
-    status: status as ProcessingStatus | undefined,
+    status: status as ProcessingStatus | null,
     isLoading,
     error,
     isPolling,

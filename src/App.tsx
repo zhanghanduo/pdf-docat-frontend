@@ -7,7 +7,6 @@ import {
   Download, 
   Loader2,
   CheckCircle,
-  XCircle,
   Languages,
   Trash2,
   Key,
@@ -17,7 +16,8 @@ import {
   Eye,
   Play,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 
 import { 
@@ -33,6 +33,7 @@ import TranslationHistory from './components/TranslationHistory';
 import PdfPreview from './components/PdfPreview';
 import EnhancedStatusDisplay from './components/EnhancedStatusDisplay';
 import AdvancedOptionsPanel from './components/AdvancedOptionsPanel';
+import InlinePdfPreview from './components/InlinePdfPreview';
 import { useClientApiKeys } from './hooks/useClientApiKeys';
 import { useProcessingStatus } from './hooks/useProcessingStatus';
 import { getCurrentUser, isAdmin, logout } from './lib/auth';
@@ -63,7 +64,7 @@ const PDFTranslator: React.FC = () => {
   const [advancedOptions, setAdvancedOptions] = useState<Partial<AdvancedTranslateRequest>>({
     source_lang: 'auto',
     target_lang: 'simplified-chinese',
-    dual: false,
+    dual: false, // Default to single language mode (disabled)
     translation_engine: 'auto',
     requests_per_second: 4,
     min_text_length: 1,
@@ -125,19 +126,30 @@ const PDFTranslator: React.FC = () => {
   } = useProcessingStatus({
     taskId: currentTaskId,
     enabled: !!currentTaskId,
-    onComplete: (result) => {
+    onComplete: (result: any) => {
+      console.log('Processing completed:', result);
       if (result.logId) {
         setCurrentLogId(result.logId);
       }
       setCurrentTaskId(null);
       setProcessingStartTime(null);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Processing failed:', error);
       setCurrentTaskId(null);
       setProcessingStartTime(null);
     }
   });
+
+  // Debug logging
+  React.useEffect(() => {
+    if (currentTaskId) {
+      console.log('Current task ID:', currentTaskId);
+      console.log('Processing status:', processingStatus);
+      console.log('Status loading:', statusLoading);
+      console.log('Status error:', statusError);
+    }
+  }, [currentTaskId, processingStatus, statusLoading, statusError]);
 
   // Validation mutation
   const validateOptionsMutation = useMutation({
@@ -160,7 +172,7 @@ const PDFTranslator: React.FC = () => {
         advanced_pdf: {
           pages: options.pages,
           no_mono: options.no_mono,
-          no_dual: options.no_dual,
+          no_dual: !options.dual, // When dual is false, set no_dual to true
           dual_translate_first: options.dual_translate_first,
           use_alternating_pages_dual: options.use_alternating_pages_dual,
           skip_clean: options.skip_clean,
@@ -260,7 +272,9 @@ const PDFTranslator: React.FC = () => {
     const request: AdvancedTranslateRequest = {
       file: selectedFile,
       target_lang: advancedOptions.target_lang,
-      ...advancedOptions
+      ...advancedOptions,
+      // Ensure no_dual is set correctly based on dual setting
+      no_dual: !advancedOptions.dual
     };
 
     translateMutation.mutate(request);
@@ -391,7 +405,7 @@ const PDFTranslator: React.FC = () => {
                 onClick={() => setShowTranslationHistory(true)}
               >
                 <History className="h-4 w-4 mr-2" />
-                History
+                {t.history}
               </Button>
 
               <Button
@@ -400,7 +414,7 @@ const PDFTranslator: React.FC = () => {
                 onClick={() => setShowApiKeysManager(true)}
               >
                 <Key className="h-4 w-4 mr-2" />
-                API Keys
+                {t.manageApiKeys}
               </Button>
 
               {userIsAdmin && (
@@ -410,7 +424,7 @@ const PDFTranslator: React.FC = () => {
                   onClick={() => setShowAdminDashboard(true)}
                 >
                   <Shield className="h-4 w-4 mr-2" />
-                  Admin
+                  {t.admin}
                 </Button>
               )}
               
@@ -453,17 +467,17 @@ const PDFTranslator: React.FC = () => {
                   {healthLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Checking status...</span>
+                      <span className="text-sm text-muted-foreground">{t.checkingStatus}</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                      <span className="text-sm font-medium">Service Available</span>
+                      <span className="text-sm font-medium">{t.serviceAvailable}</span>
                       {clientApiKeys.hasCustomKeys && (
                         <>
                           <span className="text-muted-foreground">•</span>
                           <Key className="h-4 w-4 text-blue-500" />
-                          <span className="text-sm text-blue-600">Custom Keys Active</span>
+                          <span className="text-sm text-blue-600">{t.customKeysActive}</span>
                         </>
                       )}
                     </>
@@ -477,7 +491,7 @@ const PDFTranslator: React.FC = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center space-x-2 text-base">
                   <Upload className="h-4 w-4" />
-                  <span>Upload PDF</span>
+                  <span>{t.uploadPdf}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -511,7 +525,7 @@ const PDFTranslator: React.FC = () => {
                         }}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Remove
+                        {t.removeFile}
                       </Button>
                     </div>
                   ) : (
@@ -519,9 +533,9 @@ const PDFTranslator: React.FC = () => {
                       <Upload className="h-8 w-8 text-muted-foreground mx-auto" />
                       <div>
                         <p className="text-foreground">
-                          {isDragActive ? 'Drop PDF here...' : 'Drag & drop PDF or click to select'}
+                          {isDragActive ? t.dropFileHereActive : t.dropFileHere}
                         </p>
-                        <p className="text-sm text-muted-foreground">Only PDF files are supported</p>
+                        <p className="text-sm text-muted-foreground">{t.onlyPdfSupported}</p>
                       </div>
                     </div>
                   )}
@@ -536,7 +550,7 @@ const PDFTranslator: React.FC = () => {
                   <div className="flex items-start space-x-2">
                     <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-yellow-800">Configuration Warnings</p>
+                      <p className="text-sm font-medium text-yellow-800">{t.configurationWarnings}</p>
                       <ul className="text-sm text-yellow-700 mt-1 space-y-1">
                         {validationWarnings.map((warning, index) => (
                           <li key={index}>• {warning}</li>
@@ -558,6 +572,7 @@ const PDFTranslator: React.FC = () => {
               onReset={handleResetOptions}
               onLoadPreset={handleLoadPreset}
               availablePresets={availablePresets}
+              currentLanguage={currentLanguage}
             />
 
             {/* Action Buttons */}
@@ -572,12 +587,12 @@ const PDFTranslator: React.FC = () => {
                   {translateMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Starting Translation...
+                      {t.startingTranslation}
                     </>
                   ) : (
                     <>
                       <Play className="h-4 w-4 mr-2" />
-                      Start Translation
+                      {t.startTranslation}
                     </>
                   )}
                 </Button>
@@ -591,7 +606,7 @@ const PDFTranslator: React.FC = () => {
                     variant="outline"
                   >
                     <Eye className="h-4 w-4 mr-2" />
-                    Preview
+                    {t.preview}
                   </Button>
                   
                   <Button
@@ -601,12 +616,12 @@ const PDFTranslator: React.FC = () => {
                     {downloadMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Preparing...
+                        {t.preparing}
                       </>
                     ) : (
                       <>
                         <Download className="h-4 w-4 mr-2" />
-                        Download
+                        {t.download}
                       </>
                     )}
                   </Button>
@@ -620,67 +635,56 @@ const PDFTranslator: React.FC = () => {
                   className="w-full"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
-                  Start New Translation
+                  {t.startNewTranslation}
                 </Button>
               )}
             </div>
           </div>
 
           {/* Right Column - Status & Preview */}
-          <div className="space-y-4 overflow-y-auto">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center space-x-2 text-base">
-                  <Eye className="h-4 w-4" />
-                  <span>Status & Preview</span>
+          <div className="flex flex-col h-full space-y-4">
+            {/* Status Section - Compact */}
+            <Card className="flex-shrink-0">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-2">
+                    <Activity className="h-4 w-4" />
+                    <span>{t.processingStatus}</span>
+                  </div>
+                  {currentTaskId && (
+                    <div className="flex items-center space-x-1">
+                      <div className={`w-2 h-2 rounded-full ${processingStatus ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                      <span className="text-xs text-muted-foreground">
+                        {processingStatus ? (currentLanguage === 'zh' ? '处理中' : 'Processing') : (currentLanguage === 'zh' ? '等待中' : 'Waiting')}
+                      </span>
+                    </div>
+                  )}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                                 <EnhancedStatusDisplay
-                   status={processingStatus || null}
-                   isLoading={statusLoading}
-                   error={statusError || translateMutation.error}
-                   fileName={selectedFile?.name}
-                   fileSize={selectedFile?.size}
-                   startTime={processingStartTime || undefined}
-                 />
-
-                {/* Success Actions */}
-                {translateMutation.isSuccess && currentLogId && (
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center space-x-2 text-green-800 mb-3">
-                      <CheckCircle className="h-4 w-4" />
-                      <p className="font-medium">Translation completed successfully!</p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Button
-                        onClick={() => setShowTranslationHistory(true)}
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-green-700 hover:bg-green-100"
-                      >
-                        <History className="h-4 w-4 mr-2" />
-                        View in Translation History
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error Display */}
-                {translateMutation.isError && (
-                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center space-x-2 text-red-800">
-                      <XCircle className="h-4 w-4" />
-                      <div>
-                        <p className="font-medium">Translation failed</p>
-                        <p className="text-sm mt-1">{translateMutation.error?.message}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <CardContent className="pt-0">
+                <EnhancedStatusDisplay
+                  status={processingStatus || null}
+                  isLoading={statusLoading}
+                  error={statusError || translateMutation.error}
+                  fileName={selectedFile?.name}
+                  fileSize={selectedFile?.size}
+                  startTime={processingStartTime || undefined}
+                  currentLanguage={currentLanguage}
+                  showSuccessActions={translateMutation.isSuccess && !!currentLogId}
+                  onViewHistory={() => setShowTranslationHistory(true)}
+                />
               </CardContent>
             </Card>
+
+            {/* PDF Preview Section - Takes remaining space */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <InlinePdfPreview
+                file={selectedFile || undefined}
+                logId={currentLogId || undefined}
+                currentLanguage={currentLanguage}
+                showTranslated={!!currentLogId && translateMutation.isSuccess}
+              />
+            </div>
           </div>
         </div>
       </div>

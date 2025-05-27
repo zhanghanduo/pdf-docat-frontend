@@ -9,12 +9,15 @@ import {
   AlertCircle,
   Timer,
   Activity,
-  Zap
+  Zap,
+  History
 } from 'lucide-react';
 import { ProcessingStatus } from '../lib/api';
+import { useTranslation, Language } from '../lib/i18n';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 
 interface EnhancedStatusDisplayProps {
   status: ProcessingStatus | null;
@@ -23,6 +26,9 @@ interface EnhancedStatusDisplayProps {
   fileName?: string;
   fileSize?: number;
   startTime?: Date;
+  currentLanguage: Language;
+  showSuccessActions?: boolean;
+  onViewHistory?: () => void;
 }
 
 const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
@@ -31,9 +37,13 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
   error,
   fileName,
   fileSize,
-  startTime
+  startTime,
+  currentLanguage,
+  showSuccessActions = false,
+  onViewHistory
 }) => {
   const [elapsedTime, setElapsedTime] = useState(0);
+  const t = useTranslation(currentLanguage);
 
   // Real-time elapsed time tracking
   useEffect(() => {
@@ -118,7 +128,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
         <CardContent className="pt-6">
           <div className="flex items-center space-x-2 text-red-800">
             <XCircle className="h-5 w-5" />
-            <p className="font-medium">Processing Failed</p>
+            <p className="font-medium">{t.processingFailed}</p>
           </div>
           <p className="text-sm text-red-600 mt-2">
             {error?.message || 'An error occurred during processing'}
@@ -134,7 +144,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
         <CardContent className="pt-6">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-            <p className="text-sm text-muted-foreground">Initializing processing...</p>
+            <p className="text-sm text-muted-foreground">{t.initializingProcessing}</p>
           </div>
         </CardContent>
       </Card>
@@ -147,7 +157,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
         <CardContent className="pt-6">
           <div className="text-center text-muted-foreground">
             <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Processing status will appear here</p>
+            <p className="text-sm">{t.processingStatusWillAppear}</p>
           </div>
         </CardContent>
       </Card>
@@ -179,7 +189,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {getStatusIcon()}
-              <span className="text-base">Processing Status</span>
+              <span className="text-base">{t.processingStatus}</span>
             </div>
             <Badge variant={status?.status === 'SUCCESS' ? 'default' : 'secondary'}>
               {status?.status || 'INITIALIZING'}
@@ -191,7 +201,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           <div className="flex items-center justify-between p-3 bg-white/50 rounded-lg">
             <div className="flex items-center space-x-2">
               <Timer className="h-4 w-4 text-blue-500" />
-              <span className="text-sm font-medium">Elapsed Time</span>
+              <span className="text-sm font-medium">{t.elapsedTime}</span>
             </div>
             <span className="text-sm font-mono text-blue-600">
               {status?.processing_time 
@@ -205,7 +215,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           {status && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Overall Progress</span>
+                <span className="text-sm font-medium">{t.overallProgress}</span>
                 <span className="text-sm text-muted-foreground">
                   {status.progress.toFixed(0)}%
                 </span>
@@ -231,7 +241,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           {status?.current_page && status?.total_pages && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Page Progress</span>
+                <span className="text-sm font-medium">{t.pageProgress}</span>
                 <span className="text-sm text-muted-foreground">
                   {status.current_page} / {status.total_pages}
                 </span>
@@ -247,7 +257,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           {status?.stage_current && status?.stage_total && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Stage Progress</span>
+                <span className="text-sm font-medium">{t.stageProgress}</span>
                 <span className="text-sm text-muted-foreground">
                   {status.stage_current} / {status.stage_total}
                 </span>
@@ -262,10 +272,10 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           {/* Timing Information */}
           {status?.started_at && (
             <div className="text-xs text-muted-foreground">
-              Started: {new Date(status.started_at).toLocaleTimeString()}
+              {t.started}: {new Date(status.started_at).toLocaleTimeString()}
               {status.completed_at && (
                 <span className="ml-4">
-                  Completed: {new Date(status.completed_at).toLocaleTimeString()}
+                  {t.completed}: {new Date(status.completed_at).toLocaleTimeString()}
                 </span>
               )}
             </div>
@@ -274,7 +284,7 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           {/* Error Message */}
           {status?.status === 'FAILURE' && status?.error && (
             <div className="p-3 bg-red-100 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800 font-medium">Error Details:</p>
+              <p className="text-sm text-red-800 font-medium">{t.errorDetails}:</p>
               <p className="text-sm text-red-700 mt-1">{status.error}</p>
             </div>
           )}
@@ -283,13 +293,26 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
           {status?.status === 'SUCCESS' && (
             <div className="p-3 bg-green-100 border border-green-200 rounded-lg">
               <p className="text-sm text-green-800 font-medium">
-                Processing completed successfully!
+                {t.processingCompletedSuccessfully}
                 {status.processing_time && (
                   <span className="ml-2">
-                    Total time: {formatElapsedTime(Math.floor(status.processing_time / 1000))}
+                    {t.totalTime}: {formatElapsedTime(Math.floor(status.processing_time / 1000))}
                   </span>
                 )}
               </p>
+              
+              {/* Success Actions */}
+              {showSuccessActions && onViewHistory && (
+                <Button
+                  onClick={onViewHistory}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-green-700 hover:bg-green-100 h-8 mt-2"
+                >
+                  <History className="h-3 w-3 mr-2" />
+                  <span className="text-xs">{t.viewInTranslationHistory}</span>
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
