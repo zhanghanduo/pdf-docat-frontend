@@ -29,6 +29,8 @@ interface EnhancedStatusDisplayProps {
   currentLanguage: Language;
   showSuccessActions?: boolean;
   onViewHistory?: () => void;
+  isProcessing?: boolean;
+  isSuccess?: boolean;
 }
 
 const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
@@ -40,7 +42,9 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
   startTime,
   currentLanguage,
   showSuccessActions = false,
-  onViewHistory
+  onViewHistory,
+  isProcessing = false,
+  isSuccess = false
 }) => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const t = useTranslation(currentLanguage);
@@ -144,7 +148,69 @@ const EnhancedStatusDisplay: React.FC<EnhancedStatusDisplayProps> = ({
         <CardContent className="pt-6">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-            <p className="text-sm text-muted-foreground">{t.initializingProcessing}</p>
+            <p className="text-sm text-muted-foreground">
+              {isProcessing ? t.processingDocument : t.initializingProcessing}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Handle synchronous processing state
+  if (isProcessing && !status) {
+    return (
+      <Card className="border-blue-200 bg-blue-50">
+        <CardContent className="pt-6">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+              <p className="text-sm font-medium text-blue-800">{t.processingDocument}</p>
+            </div>
+            
+            {/* Elapsed Time */}
+            <div className="flex items-center justify-between p-3 bg-white/50 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Timer className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-medium">{t.elapsedTime}</span>
+              </div>
+              <span className="text-sm font-mono text-blue-600">
+                {formatElapsedTime(elapsedTime)}
+              </span>
+            </div>
+            
+            <p className="text-xs text-blue-600">{t.pleaseWait}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Handle synchronous success state
+  if (isSuccess && !status) {
+    return (
+      <Card className="border-green-200 bg-green-50">
+        <CardContent className="pt-6">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <p className="text-sm font-medium text-green-800">{t.translationSuccess}</p>
+            </div>
+            
+            {/* Processing Time */}
+            {startTime && (
+              <div className="flex items-center justify-between p-3 bg-white/50 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <Timer className="h-4 w-4 text-green-500" />
+                  <span className="text-sm font-medium">{t.totalTime}</span>
+                </div>
+                <span className="text-sm font-mono text-green-600">
+                  {formatElapsedTime(elapsedTime)}
+                </span>
+              </div>
+            )}
+            
+            <p className="text-xs text-green-600">{t.translationCompleted}</p>
           </div>
         </CardContent>
       </Card>

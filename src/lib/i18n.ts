@@ -100,6 +100,8 @@ export interface Translations {
   processingStatus: string;
   processingStatusWillAppear: string;
   initializingProcessing: string;
+  processingDocument: string;
+  pleaseWait: string;
   elapsedTime: string;
   overallProgress: string;
   pageProgress: string;
@@ -114,12 +116,13 @@ export interface Translations {
   // Configuration
   configurationWarnings: string;
   
-  // Messages
-  translationSuccess: string;
-  translationSuccessDescription: string;
-  viewInTranslationHistory: string;
-  translationFailed: string;
-  downloadFailed: string;
+      // Messages
+    translationSuccess: string;
+    translationSuccessDescription: string;
+    viewInTranslationHistory: string;
+    translationFailed: string;
+    downloadFailed: string;
+    translationCompleted: string;
   
   // Preview
   pdfPreview: string;
@@ -236,6 +239,8 @@ const translations: Record<Language, Translations> = {
     processingStatus: '处理状态',
     processingStatusWillAppear: '处理状态将在此显示',
     initializingProcessing: '正在初始化处理...',
+    processingDocument: '正在处理文档...',
+    pleaseWait: '请稍候，正在处理您的文档',
     elapsedTime: '已用时间',
     overallProgress: '总体进度',
     pageProgress: '页面进度',
@@ -256,6 +261,7 @@ const translations: Record<Language, Translations> = {
     viewInTranslationHistory: '在翻译历史中查看',
     translationFailed: '翻译失败',
     downloadFailed: '下载失败',
+    translationCompleted: '翻译已完成',
     
     // Preview
     pdfPreview: 'PDF 预览',
@@ -370,6 +376,8 @@ const translations: Record<Language, Translations> = {
     processingStatus: 'Processing Status',
     processingStatusWillAppear: 'Processing status will appear here',
     initializingProcessing: 'Initializing processing...',
+    processingDocument: 'Processing document...',
+    pleaseWait: 'Please wait, processing your document',
     elapsedTime: 'Elapsed Time',
     overallProgress: 'Overall Progress',
     pageProgress: 'Page Progress',
@@ -390,6 +398,7 @@ const translations: Record<Language, Translations> = {
     viewInTranslationHistory: 'View in Translation History',
     translationFailed: 'Translation failed',
     downloadFailed: 'Download failed',
+    translationCompleted: 'Translation completed',
     
     // Preview
     pdfPreview: 'PDF Preview',

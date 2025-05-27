@@ -198,18 +198,26 @@ const PDFTranslator: React.FC = () => {
   // Translation mutation
   const translateMutation = useMutation({
     mutationFn: async (request: AdvancedTranslateRequest) => {
+      setProcessingStartTime(new Date());
       const result = await pdfApi.translatePdfAdvanced(request);
       if (result.task_id) {
         setCurrentTaskId(result.task_id);
-        setProcessingStartTime(new Date());
       } else if (result.logId) {
         // Direct completion without async processing
         setCurrentLogId(result.logId);
+        setProcessingStartTime(null);
       }
       return result;
     },
-    onSuccess: () => {
-      // Translation request submitted successfully
+    onSuccess: (result) => {
+      // Translation completed successfully
+      if (result.logId) {
+        setCurrentLogId(result.logId);
+        setProcessingStartTime(null);
+      }
+    },
+    onError: () => {
+      setProcessingStartTime(null);
     },
   });
 
@@ -664,7 +672,7 @@ const PDFTranslator: React.FC = () => {
               <CardContent className="pt-0">
                 <EnhancedStatusDisplay
                   status={processingStatus || null}
-                  isLoading={statusLoading}
+                  isLoading={statusLoading || translateMutation.isPending}
                   error={statusError || translateMutation.error}
                   fileName={selectedFile?.name}
                   fileSize={selectedFile?.size}
@@ -672,6 +680,8 @@ const PDFTranslator: React.FC = () => {
                   currentLanguage={currentLanguage}
                   showSuccessActions={translateMutation.isSuccess && !!currentLogId}
                   onViewHistory={() => setShowTranslationHistory(true)}
+                  isProcessing={translateMutation.isPending}
+                  isSuccess={translateMutation.isSuccess && !!currentLogId}
                 />
               </CardContent>
             </Card>
